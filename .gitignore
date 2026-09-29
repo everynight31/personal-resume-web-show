@@ -1,0 +1,10 @@
+# 依赖与构建产物（本项目零依赖，这里主要是防手滑）
+node_modules/
+dist/
+.DS_Store
+Thumbs.db
+
+# 本地导出的简历数据 / 打印产物，别误传上去（可能含个人真实信息）
+*.local.json
+*.pdf
+_site/

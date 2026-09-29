@@ -1,0 +1,327 @@
+/* =============================================================================
+ *  print.css —— 打印 / 导出 PDF 专用（@media print）
+ *  目标：浏览器「打印 → 另存为 PDF」得到一份干净的 A4 简历
+ *  1. 隐藏全部工具界面（粒子背景、悬浮按钮、识别抽屉、导航、轻提示）
+ *  2. 强制浅色配色，去掉玻璃拟态/阴影/悬浮位移，省墨且不糊
+ *  3. A4 页面尺寸 + 分页控制，卡片/时间线条目尽量不被截断
+ * ========================================================================== */
+
+@page {
+  size: A4;
+  margin: 10mm 12mm;
+}
+
+@media print {
+  /* ---------------------------------------------------- 1. 隐藏工具界面 */
+  #particle-canvas,
+  .fab-wrap,
+  .overlay,
+  .drawer,
+  .toast,
+  .section-nav,
+  #btn-parse, #btn-apply, #btn-undo, #btn-discard,
+  .link-btn, .pane-head-actions {
+    display: none !important;
+  }
+
+  /* ---------------------------------------------------- 2. 基础排版 */
+  html[data-theme="dark"],
+  html[data-theme="light"] {
+    --primary: #0058B8;
+    --primary-rgb: 0, 88, 184;
+    --text: #111111;
+    --text-strong: #000000;
+    --text-soft: #1A1A1A;
+    --text-muted: #555555;
+    --bg: #FFFFFF;
+    --bg-elevated: #FFFFFF;
+    --surface: #FFFFFF;
+    --surface-glass: #FFFFFF;
+    --border: rgba(0, 0, 0, 0.16);
+    --border-strong: rgba(0, 0, 0, 0.24);
+    --secondary: #111111;
+    --secondary-rgb: 17, 17, 17;
+  }
+
+  * {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  html, body {
+    height: auto !important;
+    min-height: 0 !important;
+    background: #FFFFFF !important;
+    color: #111111 !important;
+    font-size: 10pt;
+    line-height: 1.42;
+  }
+
+  .container {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+  }
+
+  main { display: block !important; }
+
+  a { color: #111111 !important; text-decoration: none !important; }
+
+  /* ---------------------------------------------------- 3. Hero 压缩 */
+  #hero {
+    min-height: 0 !important;
+    padding: 0 0 8pt !important;
+    margin: 0 0 4pt !important;
+    display: block !important;
+    text-align: left !important;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* 打印时头像与姓名并排，省掉一整页空白 */
+  #hero .hero-top {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12pt !important;
+  }
+
+  .avatar-ring {
+    width: 76pt !important;
+    height: 76pt !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: none !important;
+    flex: none !important;
+    border-radius: 4pt !important;
+  }
+
+  .avatar-ring::after { display: none !important; }
+
+  .avatar {
+    border-radius: 4pt !important;
+    object-fit: cover !important;
+    /* 取景已烘焙进图片，这里保持居中即可 */
+    object-position: 50% 50% !important;
+    border: 1px solid #DDDDDD;
+  }
+
+  .avatar-fallback { border-radius: 4pt !important; border: 1px solid #DDDDDD; }
+
+  #hero .name {
+    font-size: 22pt !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+  }
+
+  #hero .headline { font-size: 10pt !important; margin: 3pt 0 0 !important; }
+
+  #hero .intent {
+    font-size: 9.5pt !important;
+    margin: 5pt 0 0 !important;
+    padding: 2pt 8pt !important;
+    border: 1px solid #BBBBBB !important;
+    background: none !important;
+    border-radius: 3pt !important;
+    display: inline-block !important;
+    color: #111111 !important;
+  }
+
+  #hero .contact-info {
+    margin: 6pt 0 0 !important;
+    justify-content: flex-start !important;
+    gap: 4pt 14pt !important;
+    font-size: 9.5pt !important;
+  }
+
+  #hero .contact-info .contact-item { color: #222222 !important; }
+  #hero .contact-info .contact-item svg { display: none !important; }
+
+  /* ---------------------------------------------------- 4. 成绩条 */
+  .scores {
+    max-width: none !important;
+    margin: 8pt 0 0 !important;
+    padding: 6pt 10pt !important;
+    border: 1px solid #CCCCCC !important;
+    border-radius: 4pt !important;
+    background: none !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .scores-head { margin-bottom: 5pt !important; }
+  .scores-head .scores-title { font-size: 8pt !important; color: #555555 !important; }
+  .scores-head .scores-total { font-size: 13pt !important; }
+  .scores-list { justify-content: flex-start !important; gap: 5pt !important; }
+
+  .score-chip {
+    font-size: 9pt !important;
+    padding: 1pt 7pt !important;
+    border: 1px solid #CCCCCC !important;
+    background: none !important;
+    border-radius: 3pt !important;
+  }
+
+  /* ---------------------------------------------------- 5. 区块与分页 */
+  .resume-section {
+    padding: 7pt 0 !important;
+    margin: 0 !important;
+    border-bottom: 1px solid #DDDDDD !important;
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .resume-section:last-of-type { border-bottom: none !important; }
+
+  .section-title {
+    font-size: 12.5pt !important;
+    padding-bottom: 3pt !important;
+    margin-bottom: 6pt !important;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .section-title::after {
+    width: 30pt !important;
+    height: 1.6pt !important;
+    background: #0058B8 !important;
+  }
+
+  .timeline-item, .card, .list-items li, .skills-grid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 卡片/条目的标题不要单独留在页尾 */
+  .timeline-content h3, .card-header h3, .blocks li .block-label {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* 时间线 */
+  .timeline { padding-left: 14pt !important; }
+  .timeline::before { background: #CCCCCC !important; }
+
+  .timeline-item { margin-bottom: 7pt !important; }
+
+  .timeline-icon {
+    left: -22pt !important;
+    top: 2pt !important;
+    width: 14pt !important;
+    height: 14pt !important;
+    border: 1px solid #0058B8 !important;
+    background: #FFFFFF !important;
+  }
+
+  .timeline-icon svg { width: 8pt !important; height: 8pt !important; }
+  .timeline-icon img { border-radius: 50%; }
+
+  .timeline-content {
+    padding: 6pt 9pt !important;
+    border: 1px solid #DDDDDD !important;
+    border-radius: 3pt !important;
+    background: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    transform: none !important;
+  }
+
+  .timeline-content h3 { font-size: 11pt !important; margin-bottom: 2pt !important; }
+
+  .timeline-date, .card .job-date {
+    float: right !important;
+    font-size: 8.5pt !important;
+    padding: 0 4pt !important;
+    border: 1px solid #CCCCCC !important;
+    background: none !important;
+    border-radius: 2pt !important;
+  }
+
+  .timeline-content .degree { font-size: 10pt !important; }
+  .timeline-content .location { font-size: 9pt !important; }
+
+  /* 卡片 */
+  .card {
+    padding: 7pt 10pt !important;
+    margin-bottom: 7pt !important;
+    border: 1px solid #DDDDDD !important;
+    border-radius: 3pt !important;
+    background: none !important;
+    transform: none !important;
+  }
+
+  .card-header { margin-bottom: 5pt !important; gap: 7pt !important; }
+
+  .card-icon {
+    width: 16pt !important;
+    height: 16pt !important;
+    font-size: 8pt !important;
+    background: none !important;
+    border: 1px solid #0058B8 !important;
+  }
+
+  .card-icon svg { width: 9pt !important; height: 9pt !important; }
+  .card-header h3 { font-size: 11pt !important; }
+  .card .job-title { font-size: 9.5pt !important; }
+
+  .blocks li, .list-items li {
+    font-size: 9.4pt !important;
+    line-height: 1.48 !important;
+    margin-bottom: 3.5pt !important;
+    padding-left: 10pt !important;
+  }
+
+  .blocks li::before, .list-items li::before {
+    width: 3pt !important;
+    height: 3pt !important;
+    top: 5.5pt !important;
+    background: #0058B8 !important;
+  }
+
+  .blocks li .block-label { font-size: 10pt !important; margin-bottom: 1pt !important; }
+  .blocks li .block-label::after { display: none !important; }
+
+  /* 技能标签 */
+  .skills-grid { gap: 5pt !important; }
+  .skills-group-title { font-size: 9pt !important; color: #444444 !important; margin-bottom: 3pt !important; }
+  .tag-container { gap: 3pt 5pt !important; }
+
+  .skill-tag {
+    font-size: 9pt !important;
+    padding: 1pt 7pt !important;
+    border: 1px solid #BBBBBB !important;
+    background: none !important;
+    color: #111111 !important;
+    border-radius: 3pt !important;
+    transform: none !important;
+  }
+
+  .skill-tag.main-skill {
+    border-color: #0058B8 !important;
+    color: #0058B8 !important;
+    font-weight: 600 !important;
+    background: none !important;
+  }
+
+  .skill-tag.aux-skill { color: #333333 !important; }
+
+  .list-items { gap: 5pt !important; }
+  .list-items .item-title { color: #000000 !important; }
+
+  /* ---------------------------------------------------- 6. 页脚 */
+  #page-footer {
+    margin-top: 8pt !important;
+    padding: 6pt 0 0 !important;
+    border-top: 1px solid #DDDDDD !important;
+    font-size: 8pt !important;
+    color: #666666 !important;
+  }
+
+  /* 兜底：任何带 reveal 类的元素都必须可见 */
+  .reveal { opacity: 1 !important; transform: none !important; }
+}

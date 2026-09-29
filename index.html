@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- 这里是打开瞬间的占位标题，页面渲染后会由 render.js 按 data.js 的
+     meta.title（或 profile.name）自动改写，所以改简历内容不用动这一行 -->
+<title>简历</title>
+<meta name="description" content="网页简历 · 现代简约风格，内置「粘贴文本一键识别」工具">
+<meta name="color-scheme" content="light dark">
+
+<!-- 主题需在样式表之前确定，避免深色模式闪白 -->
+<script>
+(function () {
+  try {
+    var saved = localStorage.getItem('resume.theme');
+    var sys = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var theme = saved || (sys ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-theme-source', saved ? 'manual' : 'system');
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
+})();
+</script>
+
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="print.css" media="print">
+</head>
+
+<body>
+<!-- 粒子背景（自绘 Canvas，零外部依赖） -->
+<canvas id="particle-canvas" aria-hidden="true"></canvas>
+
+<div class="container">
+  <main id="resume-root">
+    <!-- 全部内容由 render.js 依据 data.js / localStorage 渲染 -->
+  </main>
+
+  <footer id="page-footer">
+    <p id="footer-line"></p>
+    <p id="footer-note"></p>
+  </footer>
+</div>
+
+<!-- ===================== 悬浮入口 ===================== -->
+<div class="fab-wrap">
+  <button type="button" id="theme-toggle" class="icon-btn" title="切换深色模式" aria-label="切换深色模式">
+    <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><g class="rays"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></g></svg>
+    <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13.4A8.2 8.2 0 1 1 10.6 4a6.6 6.6 0 0 0 9.4 9.4z"/></svg>
+  </button>
+
+  <button type="button" id="parser-fab" class="fab" aria-haspopup="dialog" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="fab-icon">
+      <path d="M9 3h6v3h3.5A1.5 1.5 0 0 1 20 7.5v13A1.5 1.5 0 0 1 18.5 22h-13A1.5 1.5 0 0 1 4 20.5v-13A1.5 1.5 0 0 1 5.5 6H9z"/>
+      <path d="M9 3v3h6V3"/>
+      <path d="M8.2 12.2l2 5.6 4.6-5.6M8 20h8" class="accent"/>
+    </svg>
+    <span class="fab-text">粘贴识别</span>
+  </button>
+</div>
+
+<!-- ===================== 识别 / 校对抽屉 ===================== -->
+<div id="parser-overlay" class="overlay" hidden></div>
+
+<aside id="parser-drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+  <header class="drawer-head">
+    <h2 id="drawer-title">粘贴识别</h2>
+    <div class="drawer-head-actions">
+      <div class="seg" role="tablist" aria-label="工作模式">
+        <button type="button" class="seg-btn is-active" data-tab="review" role="tab" aria-selected="true">识别校对</button>
+        <button type="button" class="seg-btn" data-tab="settings" role="tab" aria-selected="false">设置</button>
+      </div>
+      <button type="button" id="drawer-close" class="icon-btn" title="关闭（Esc）" aria-label="关闭">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ------------------------------ 识别校对页 ------------------------------ -->
+  <div class="drawer-body" data-panel="review">
+    <div class="pane pane-input">
+      <div class="pane-head">
+        <h3>① 粘贴简历文本</h3>
+        <div class="pane-head-actions">
+          <button type="button" id="btn-template" class="link-btn">载入模板</button>
+          <button type="button" id="btn-load-file" class="link-btn">读取文件</button>
+          <input type="file" id="file-input" accept=".txt,.md,.json,text/plain" hidden>
+        </div>
+      </div>
+
+      <p class="hint">
+        带 <code>【小标题】</code> 的文本识别率最高（约 95%）；<b>没有小标题也能识别</b>，
+        靠日期、电话、邮箱等线索自动分段（准确率会降一些，右侧可逐项修正）。
+      </p>
+
+      <textarea id="raw-input" spellcheck="false"
+        placeholder="把简历文本整段粘贴到这里……"></textarea>
+
+      <div class="pane-foot">
+        <div class="parse-status" id="parse-status" data-state="idle">等待输入</div>
+        <div class="btn-row">
+          <button type="button" id="btn-sample" class="btn ghost">填入示例</button>
+          <button type="button" id="btn-parse" class="btn primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="btn-icon"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+            一键识别
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane pane-review">
+      <div class="pane-head">
+        <h3>② 校对并应用</h3>
+        <div class="pane-head-actions">
+          <button type="button" id="btn-expand-all" class="link-btn">展开全部</button>
+          <button type="button" id="btn-collapse-all" class="link-btn">收起全部</button>
+          <button type="button" id="btn-select-all" class="link-btn">全选</button>
+          <button type="button" id="btn-select-none" class="link-btn">全不选</button>
+        </div>
+      </div>
+
+      <div id="review-list" class="review-list">
+        <div class="empty-state" id="review-empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
+          <p>识别结果会出现在这里，逐项勾选后再应用。</p>
+        </div>
+      </div>
+
+      <div class="pane-foot">
+        <div class="apply-status" id="apply-status"></div>
+        <div class="btn-row">
+          <button type="button" id="btn-undo" class="btn ghost" disabled>撤销上次应用</button>
+          <button type="button" id="btn-discard" class="btn ghost">清空结果</button>
+          <button type="button" id="btn-apply" class="btn primary" disabled>应用到简历</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane pane-mini">
+      <div class="pane-head">
+        <h3>实时预览</h3>
+        <span class="mini-badge" id="mini-badge">当前数据</span>
+      </div>
+      <div class="mini-frame">
+        <div class="mini-scale" id="mini-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- -------------------------------- 设置页 -------------------------------- -->
+  <div class="drawer-body" data-panel="settings" hidden>
+    <section class="setting-group">
+      <h3>大模型增强识别</h3>
+      <p class="hint">
+        默认<b>关闭</b>——关闭时全部在本地解析，不联网、不花钱。
+        打开后会把粘贴的文本发给 DeepSeek 做结构化抽取，对
+        <b>乱七八糟的自由文本</b>效果明显更好。Key 只存在你自己的浏览器里。
+      </p>
+
+      <label class="switch">
+        <input type="checkbox" id="llm-enabled">
+        <span class="switch-track"><span class="switch-thumb"></span></span>
+        <span class="switch-label">启用大模型解析（联网，消耗 token）</span>
+      </label>
+
+      <div class="field">
+        <label for="llm-key">API Key</label>
+        <input type="password" id="llm-key" placeholder="sk-..." autocomplete="off" spellcheck="false">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="llm-base">Base URL</label>
+          <input type="text" id="llm-base" placeholder="https://api.deepseek.com" spellcheck="false">
+        </div>
+        <div class="field">
+          <label for="llm-model">模型</label>
+          <input type="text" id="llm-model" placeholder="deepseek-chat" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="llm-trigger">调用策略</label>
+        <select id="llm-trigger">
+          <option value="always">总是优先用大模型</option>
+          <option value="fallback">仅当本地规则识别结果过差时才调用</option>
+          <option value="manual">只有我点「大模型识别」时才调用</option>
+        </select>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" id="btn-llm-clear" class="btn ghost">清除已保存的 Key</button>
+        <button type="button" id="btn-llm-test" class="btn ghost">测试连通性</button>
+      </div>
+      <div class="apply-status" id="llm-status"></div>
+    </section>
+
+    <section class="setting-group">
+      <h3>背景效果</h3>
+      <p class="hint">
+        背景是自绘 Canvas，不联网、不依赖任何库。挑一个你喜欢的；
+        选择会记在浏览器里，刷新后保持。
+      </p>
+
+      <div class="effect-grid" id="effect-grid" role="radiogroup" aria-label="背景效果"></div>
+
+      <div class="field">
+        <label for="bg-density">粒子密度：<span id="bg-density-value">100%</span></label>
+        <input type="range" id="bg-density" min="40" max="200" step="10" value="100">
+      </div>
+
+      <div class="btn-row">
+        <button type="button" id="btn-bg-reset" class="btn ghost">恢复默认背景</button>
+      </div>
+      <div class="apply-status" id="bg-status"></div>
+    </section>
+
+    <section class="setting-group">
+      <h3>头像</h3>
+      <p class="hint">
+        选一张照片，会自动裁成竖版证件照比例并压缩后存在浏览器里（不联网、不上传）。
+        建议用白底免冠照；压缩后的体积通常 100KB 以内。
+      </p>
+      <div class="avatar-row">
+        <div class="avatar-preview" id="avatar-preview"></div>
+        <div class="avatar-actions">
+          <div class="btn-row">
+            <button type="button" id="btn-avatar-pick" class="btn primary">选择照片</button>
+            <button type="button" id="btn-avatar-clear" class="btn ghost">移除头像</button>
+          </div>
+          <div class="hint" id="avatar-info">当前：默认占位图</div>
+          <div class="field" id="avatar-nudge-row" hidden>
+            <label for="avatar-nudge">取景位置：<span id="avatar-nudge-value">居中</span></label>
+            <input type="range" id="avatar-nudge" min="-100" max="100" step="5" value="0">
+            <div class="field-hint">照片构图不合适时，往左拖显示上方、往右拖显示下方。</div>
+          </div>
+        </div>
+        <input type="file" id="avatar-input" accept="image/*" hidden>
+      </div>
+      <div class="apply-status" id="avatar-status"></div>
+    </section>
+
+    <section class="setting-group">
+      <h3>简历模块</h3>
+      <p class="hint">
+        这里的顺序就是页面上区块的顺序。可以删掉不需要的、调整先后，或者新建自己的模块
+        （荣誉奖项、发表论文、校园经历…）。新建后直接在本页填写内容，右侧会实时预览。
+      </p>
+
+      <div class="new-module-row">
+        <div class="field">
+          <label for="new-module-title">新模块名称</label>
+          <input type="text" id="new-module-title" placeholder="例：荣誉奖项 / 发表论文 / 校园经历" maxlength="20">
+        </div>
+        <button type="button" id="btn-add-module" class="btn primary">+ 新建模块</button>
+      </div>
+      <div class="hint" id="new-module-hint">输入名称后会按名字自动推荐版式，也可以手动改。</div>
+
+      <div class="module-list" id="module-list"></div>
+      <div class="apply-status" id="module-status"></div>
+    </section>
+
+    <section class="setting-group">
+      <h3>数据管理</h3>
+      <p class="hint">
+        页面数据 = <code>data.js</code> 默认值 + 你在网页上的修改（存在浏览器 localStorage）。
+        换电脑或清缓存前记得导出备份。
+      </p>
+      <div class="btn-row">
+        <button type="button" id="btn-export" class="btn ghost">导出 JSON</button>
+        <button type="button" id="btn-import" class="btn ghost">导入 JSON</button>
+        <input type="file" id="import-input" accept=".json,application/json" hidden>
+        <button type="button" id="btn-reset" class="btn danger">恢复默认数据</button>
+      </div>
+      <div class="apply-status" id="data-status"></div>
+    </section>
+
+    <section class="setting-group">
+      <h3>关于</h3>
+      <p class="hint">
+        纯静态单页，双击 <code>index.html</code> 即可运行，不需要服务器、不需要联网。
+        打印请用浏览器「打印 → 另存为 PDF」，会自动隐藏所有工具界面并按 A4 分页。
+      </p>
+    </section>
+  </div>
+</aside>
+
+<!-- 轻提示 -->
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<noscript>
+  <p style="padding:24px;text-align:center">这份简历需要 JavaScript 才能渲染，请在浏览器设置中启用。</p>
+</noscript>
+
+<script src="data.js"></script>
+<script src="js/helpers.js" defer></script>
+<script src="js/skills.js" defer></script>
+<script src="js/parser.js" defer></script>
+<script src="js/llm.js" defer></script>
+<script src="js/store.js" defer></script>
+<script src="js/render.js" defer></script>
+<script src="js/particles.js" defer></script>
+<script src="js/ui.js" defer></script>
+</body>
+</html>

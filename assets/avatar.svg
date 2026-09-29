@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400" width="320" height="400" role="img" aria-label="头像占位图">
+  <title>头像占位图</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#EAF3FE"/>
+      <stop offset="1" stop-color="#CFE3FB"/>
+    </linearGradient>
+    <linearGradient id="man" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5AA5F2"/>
+      <stop offset="1" stop-color="#0071E3"/>
+    </linearGradient>
+    <!-- 头像在页面上是按圆形裁切显示的（124px 圆），
+         所以构图必须按这个圆来排：圆外的内容根本看不到。
+         人像控制在圆内居中略偏上，肩部留出完整弧线、不要被圆底切平。 -->
+    <clipPath id="ring">
+      <circle cx="160" cy="200" r="160"/>
+    </clipPath>
+  </defs>
+
+  <rect width="320" height="400" fill="url(#bg)"/>
+
+  <!-- 与页面粒子风格呼应的细线，限制在圆内 -->
+  <g clip-path="url(#ring)" stroke="#0071E3" stroke-opacity="0.16" stroke-width="1.5" fill="none">
+    <path d="M4 96 L60 62 L124 104"/>
+    <path d="M200 54 L258 88 L316 62"/>
+    <path d="M8 330 L62 356 L120 328"/>
+  </g>
+  <g clip-path="url(#ring)" fill="#0071E3" fill-opacity="0.26">
+    <circle cx="60" cy="62" r="4"/>
+    <circle cx="258" cy="88" r="4"/>
+    <circle cx="62" cy="356" r="4"/>
+  </g>
+
+  <!-- 人像剪影：头 cy=124 r=53，肩顶 y=182、整体下移 4。
+       实测在 124px 圆内的留白约为「顶部 9.7% / 底部 27.0%」，视觉重心居中略偏上。 -->
+  <g clip-path="url(#ring)">
+    <g fill="url(#man)">
+      <circle cx="160" cy="124" r="53"/>
+      <path d="M160 182
+               c-50 0 -92 30 -104 76
+               a10 10 0 0 0 10 12
+               h188
+               a10 10 0 0 0 10 -12
+               c-12 -46 -54 -76 -104 -76z"
+            transform="translate(0 4)"/>
+    </g>
+  </g>
+
+  <!-- 圆外部分：主页面按圆裁切看不到，另存整图 / 放大查看时给出提示 -->
+  <text x="160" y="386" text-anchor="middle"
+        font-family="-apple-system, Segoe UI, Microsoft YaHei, sans-serif"
+        font-size="18" fill="#0071E3" fill-opacity="0.55">替换为你的照片</text>
+</svg>
