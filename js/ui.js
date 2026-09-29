@@ -1719,7 +1719,8 @@
 
       var head = el('div', 'module-item-head');
       head.appendChild(el('span', 'module-item-index', String(index + 1)));
-      head.appendChild(el('span', 'module-item-title', title));
+      var titleEl = el('span', 'module-item-title', title);
+      head.appendChild(titleEl);
 
       var tools = el('div', 'module-tools');
       tools.appendChild(moduleBtn('up', '上移', index === 0, onUp));
@@ -1727,6 +1728,11 @@
       tools.appendChild(moduleBtn('remove', '删除这一条', false, onRemove));
       head.appendChild(tools);
       card.appendChild(head);
+
+      /* 让调用方能只改标题文字而不重建 DOM。
+         重建整份列表会把正在输入的输入框一起删掉，焦点就丢了 ——
+         表现就是「打一半像有人按了回车」。 */
+      card._setTitle = function (t) { titleEl.textContent = t; };
       return card;
     }
 
@@ -1807,7 +1813,9 @@
       } else if (sec.sort === 'cards') {
         var row1 = el('div', 'module-field-row');
         row1.appendChild(field('名称（项目 / 公司）', it.org || '', function (v) {
-          mutate(function (t) { if (t.items[i]) t.items[i].org = v; }, true);
+          /* 只更新条目标题，不重建列表 —— 重建会让输入框失焦 */
+          mutate(function (t) { if (t.items[i]) t.items[i].org = v; });
+          card._setTitle(v || it.title || '');
         }));
         row1.appendChild(field('时间', it.date || '', function (v) {
           mutate(function (t) { if (t.items[i]) t.items[i].date = v; });
@@ -1832,7 +1840,9 @@
       } else if (sec.sort === 'timeline') {
         var trow1 = el('div', 'module-field-row');
         trow1.appendChild(field('学校 / 单位', it.org || '', function (v) {
-          mutate(function (t) { if (t.items[i]) t.items[i].org = v; }, true);
+          /* 只更新条目标题，不重建列表 —— 重建会让输入框失焦 */
+          mutate(function (t) { if (t.items[i]) t.items[i].org = v; });
+          card._setTitle(v || it.degree || '');
         }));
         trow1.appendChild(field('日期', it.date || '', function (v) {
           mutate(function (t) { if (t.items[i]) t.items[i].date = v; });

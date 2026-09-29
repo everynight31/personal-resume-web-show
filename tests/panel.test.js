@@ -52,9 +52,18 @@ function makeEl(tag) {
     setAttribute(k, v) { this.attrs[k] = String(v); if (k === 'class') this.className = String(v); },
     getAttribute(k) { return this.attrs[k]; },
     removeAttribute(k) { delete this.attrs[k]; },
+    /* 浏览器里 .title 是独立属性（设置它不会写进 attrs），桩件照此实现 */
+    get title() { return this._title || ''; },
+    set title(v) { this._title = String(v); },
     addEventListener(t, fn) { (this._listeners[t] = this._listeners[t] || []).push(fn); },
     removeEventListener() {},
-    dispatch(t, ev) { (this._listeners[t] || []).forEach(fn => fn(ev || { target: this })); },
+    dispatch(t, ev) {
+      (this._listeners[t] || []).forEach(fn => fn(ev || {
+        target: this,
+        stopPropagation() {},
+        preventDefault() {}
+      }));
+    },
     querySelector() { return null; },
     querySelectorAll() { return []; },
     getBoundingClientRect() { return { top: 0, left: 0, width: 300, height: 40, bottom: 40, right: 300 }; },
@@ -136,7 +145,11 @@ function makeEnv() {
     'llm-enabled', 'llm-key', 'llm-base', 'llm-model', 'llm-trigger', 'llm-status',
     'btn-llm-clear', 'btn-llm-test', 'btn-export', 'btn-import', 'import-input',
     'btn-reset', 'data-status', 'effect-grid', 'bg-density', 'bg-density-value',
-    'btn-bg-reset', 'bg-status'
+    'btn-bg-reset', 'bg-status',
+    /* 头像与模块管理（模块编辑器的测试要用） */
+    'avatar-preview', 'avatar-input', 'btn-avatar-pick', 'btn-avatar-clear',
+    'avatar-info', 'avatar-status', 'avatar-nudge', 'avatar-nudge-row', 'avatar-nudge-value',
+    'module-list', 'new-module-title', 'new-module-hint', 'btn-add-module', 'module-status'
   ];
   NEEDED.forEach(function (id) {
     const el = makeEl(id.indexOf('btn-') === 0 || id === 'drawer-close' ? 'button' : 'div');
@@ -529,10 +542,104 @@ const panelEditDone = (async function () {
     '7.7 没动过的模块内容应原样保留');
 })();
 
-Promise.resolve(panelEditDone).then(function () { return unparsedEditDone; }).then(function () {
-  console.log('\n' + '═'.repeat(60));
-  console.log(`  通过 ${pass} 项，失败 ${fail} 项`);
-  if (fail) { console.log('\n  失败明细：'); failures.forEach(f => console.log('   ✗ ' + f)); }
-  console.log('═'.repeat(60) + '\n');
-  process.exit(fail ? 1 : 0);
-});
+/* 8. 在「设置 → 简历模块」里打字时不能重建列表
+      —— 重建会把正在输入的输入框删掉，焦点丢失，表现成「打一半像有人按了回车」 */
+console.log('\n-- 模块编辑器：打字不丢焦点 --');
+const moduleTypingDone = (async function () {
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const win = makeEnv();
+  const UI = win.ResumeUI, Store = win.ResumeStore;
+
+  /* 造一个时间线模块（「学校 / 单位」字段就在这种版式里） */
+  const seeded = Store.load();
+  seeded.sections = [
+    { id: 'education', title: '教育背景', sort: 'timeline', anchor: 'education',
+      items: [{ org: '示例大学', date: '2021.09 – 2025.06', degree: '本科 · 通信工程', location: '北京', bullets: ['主修课程'] }] }
+  ];
+  Store.save(seeded);
+
+  UI._renderModuleManagerForTest();
+  const list = win.document.getElementById('module-list');
+
+  /* 找到「学校 / 单位」那个输入框（el() 第三个参数写的是 innerHTML） */
+  let target = null;
+  list.descendants(function (n) {
+    const labelText = (n.innerHTML || n.textContent || '').trim();
+    if (n.tagName === 'LABEL' && labelText === '学校 / 单位') {
+      /* label 的下一个兄弟就是输入框 */
+      const kids = n.parentElement.children;
+      const idx = kids.indexOf(n);
+      if (kids[idx + 1] && kids[idx + 1].tagName === 'INPUT') target = kids[idx + 1];
+    }
+    return false;
+  });
+
+  ok(!!target, '8.1 应能找到「学校 / 单位」输入框');
+  if (!target) return;
+
+  const originalNode = target;
+  ok(originalNode.value === '示例大学', '8.2 输入框应预填当前值', originalNode.value);
+
+  /* 模拟用户连续打字：每次输入后等防抖落地 */
+  const typed = '北京a\'da\'d';
+  originalNode.value = typed;
+  originalNode.dispatch('input');
+  await wait(500);
+
+  /* 关键断言：节点必须还是同一个（没被重建），且值没被覆盖 */
+  const stillThere = list.descendants(n => n === originalNode).length === 1;
+  ok(stillThere, '8.3 打字后输入框节点不应被重建（重建会丢焦点）');
+
+  const inputAfter = list.descendants(n =>
+    n.tagName === 'INPUT' && n.value === typed)[0];
+  ok(!!inputAfter, '8.4 输入的值应保留在同一个输入框里', 
+    JSON.stringify(list.descendants(n => n.tagName === 'INPUT').map(n => n.value)));
+
+  /* 值确实落盘了 */
+  const saved = Store.load().sections[0].items[0].org;
+  ok(saved === typed, '8.5 输入的值应写入 store', JSON.stringify(saved));
+
+  /* 条目标题应就地更新，而不是靠重建 */
+  const titleEl = list.descendants(n => n.className === 'module-item-title')[0];
+  ok(titleEl && titleEl.textContent === typed, '8.6 条目标题应就地更新为新值',
+    titleEl ? titleEl.textContent : '(无)');
+})();
+
+/* 9. 结构性操作（增删条目）仍然可以重建列表 */
+{
+  const win = makeEnv();
+  const UI = win.ResumeUI, Store = win.ResumeStore;
+  const seeded = Store.load();
+  seeded.sections = [{ id: 'education', title: '教育背景', sort: 'timeline',
+    items: [{ org: 'A', bullets: [] }, { org: 'B', bullets: [] }] }];
+  Store.save(seeded);
+
+  UI._renderModuleManagerForTest();
+  const list = win.document.getElementById('module-list');
+  const before = list.descendants(n => n.className === 'module-item').length;
+  ok(before === 2, '9.1 应有 2 个条目', String(before));
+
+  /* 点第一个条目的「删除这一条」（注意别点成模块级的「删除这个模块」） */
+  const del = list.descendants(n => n.className && n.className.indexOf('module-btn is-danger') === 0
+    && n.title === '删除这一条')[0];
+  ok(!!del, '9.2 应能找到「删除这一条」按钮');
+  if (del) {
+    del.dispatch('click');
+    const after = list.descendants(n => n.className === 'module-item').length;
+    ok(after === 1, '9.3 删除一条后列表应重建为 1 条', String(after));
+    const secAfter = Store.load().sections[0];
+    ok(!!secAfter && secAfter.items.length === 1, '9.4 数据也应同步，模块本身还在',
+      secAfter ? String(secAfter.items.length) : '(模块被删了)');
+  }
+}
+
+Promise.resolve(panelEditDone)
+  .then(function () { return unparsedEditDone; })
+  .then(function () { return moduleTypingDone; })
+  .then(function () {
+    console.log('\n' + '═'.repeat(60));
+    console.log(`  通过 ${pass} 项，失败 ${fail} 项`);
+    if (fail) { console.log('\n  失败明细：'); failures.forEach(f => console.log('   ✗ ' + f)); }
+    console.log('═'.repeat(60) + '\n');
+    process.exit(fail ? 1 : 0);
+  });
