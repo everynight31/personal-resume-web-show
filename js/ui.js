@@ -490,18 +490,33 @@
           '也可以在上面粘贴新文本后点「一键识别」来覆盖对应模块。'
         ])
       : noteLine([
-          '列出了', { b: '全部模块' },
-          '：带「现有模块（本次未识别到）」标记的那些不会被这次识别改动 —— ' +
-          '它们的内容留空、默认不勾选，你不动它就不会被写回。' +
-          '想改的话直接在框里输入，输入后会自动勾上。'
+          '勾选 = 这一项要不要出现在简历里。带「现有模块（本次未识别到）」标记的',
+          '默认不勾选，所以不会被这次识别影响；想保留它们就勾上。',
+          '没勾的模块只是不显示，内容仍留在「设置 → 简历模块」里，可以从那里删。',
+          '右侧预览就是点应用后的结果。'
         ]));
 
-    /* ---------- 头部信息组 ---------- */
+    /* ---------- 头部信息组 ----------
+       「抽到了才显示」：本次识别没抽到的字段一律留空且不勾选，
+       否则会把简历里的旧值显示出来，看着像是从粘贴的文本里识别到的。
+       头像识别器永远抽不到（文本里没有图片），所以单独给一个编辑入口。 */
+    var fromCur = !!rev._fromCurrent;
     var headFields = [];
-    headFields.push({ path: 'profile.name', label: '姓名', value: rev.profile.name });
-    headFields.push({ path: 'profile.headline', label: '身份', value: rev.profile.headline });
-    headFields.push({ path: 'profile.intent', label: '报考/求职意向', value: rev.profile.intent });
-    headFields.push({ path: 'profile.contacts', label: '联系方式', value: rev.profile.contacts });
+    [
+      { path: 'profile.name', label: '姓名', v: rev.profile.name },
+      { path: 'profile.headline', label: '身份', v: rev.profile.headline },
+      { path: 'profile.intent', label: '报考/求职意向', v: rev.profile.intent },
+      { path: 'profile.contacts', label: '联系方式', v: rev.profile.contacts }
+    ].forEach(function (f) {
+      var found = hasValue(f.v);
+      headFields.push({
+        path: f.path,
+        label: f.label,
+        value: found ? f.v : null,
+        /* 没抽到 → 默认不勾选；当前数据模式下所有字段都算「有」 */
+        notFound: !found && !fromCur
+      });
+    });
     /* 头像识别器抽不到（文本里没有图片），但给它一个可编辑入口：
        想换照片请到「设置 → 头像」上传，这里也接受直接填图片地址 */
     headFields.push({
@@ -594,6 +609,10 @@
   /**
    * 一个可折叠的分组卡片：头部一行放「勾选框 + 标题 + 摘要」，避免标题被挤成竖排
    * @param {boolean} isExisting 该模块本次没识别到（内容空着、默认不勾选）
+   *
+   * 勾选的含义：这一项要不要出现在简历里。
+   *   · 勾上 → 应用后显示（基本信息写回，区块 visible）
+   *   · 不勾 → 应用后不显示（基本信息清空，区块标 hidden；数据都还在，设置里能找到）
    */
   function buildGroup(groupPath, title, fields, section, isExisting) {
     var group = document.createElement('div');
@@ -601,8 +620,8 @@
     /* 现有模块（本次没识别到）打个标记，一是便于区分，二是让测试能断言 */
     if (isExisting) group.classList.add('is-existing');
     group.dataset.groupPath = groupPath;
-    /* 未识别到的模块默认不勾选：列出来是为了让你能改，但不主动写回旧内容 */
-    var initiallyChecked = !isExisting;
+    /* 组头勾选框的状态：只要有字段默认不勾，组头就不勾 */
+    var initiallyChecked = !isExisting && !fields.some(function (f) { return f.notFound; });
 
     var filled = fields.filter(function (f) { return hasValue(f.value); }).length;
     var missing = fields.length - filled;
@@ -647,11 +666,13 @@
     var body = document.createElement('div');
     body.className = 'review-fields';
 
-    /* 未识别到的模块：先把勾选状态置为「不选」，再渲染字段，
-       否则 buildField 会把每一项都默认设为勾选，跟组头的未勾选状态对不上 */
-    if (isExisting) fields.forEach(function (f) { state.checked[f.path] = false; });
+    /* 未识别到的模块、以及本次没抽到的字段：先置为「不选」，再渲染，
+       否则 buildField 会把每一项都默认设为勾选，跟组头的状态对不上 */
     fields.forEach(function (f) {
-      body.appendChild(buildField(f, section, initiallyChecked));
+      if (isExisting || f.notFound) state.checked[f.path] = false;
+    });
+    fields.forEach(function (f) {
+      body.appendChild(buildField(f, section, state.checked[f.path] !== false));
     });
 
     function refreshSummary() {
@@ -852,42 +873,113 @@
     Store.setByPath(obj, path, value);
   }
 
+  /* ==================================================== 面板状态 → 简历数据 */
+
+  /**
+   * 把「面板当前的样子」换算成「点应用后的简历数据」。
+   *
+   * 预览和应用**共用这一个函数**，这样预览显示什么、应用后就一定是什么 ——
+   * 之前两边各写一套，导致预览说会消失、实际却还在。
+   *
+   * 规则（勾选 = 这一项要不要出现在简历里）：
+   *   · 基本信息勾上 → 写入面板里的值（哪怕是空，也会清掉旧值）；
+   *     不勾 → 视为不要这一项，清空
+   *   · 区块勾上   → 用面板里的内容，并去掉 hidden 标记
+   *   · 区块不勾   → 只标 hidden（不显示），数据留在 store 里，设置里还能看到/删除
+   *
+   * @param {Object} base 当前数据（Store.load()）
+   * @returns {{data:Object, applied:number}}
+   */
+  function computeResult(base) {
+    var rev = reviewSource();
+    var out = clone(base);
+    var applied = 0;
+
+    var mergeSource = rev._fromCurrent ? base.sections : rev.sections;
+    var entries = mergeSections(base.sections, mergeSource);
+
+    /* ---------- 基本信息 ---------- */
+    var profileKeys = [
+      { path: 'profile.name', key: 'name' },
+      { path: 'profile.headline', key: 'headline' },
+      { path: 'profile.intent', key: 'intent' },
+      { path: 'profile.contacts', key: 'contacts' }
+    ];
+    profileKeys.forEach(function (f) {
+      /* 当前数据模式下字段都是「有」的，照常处理 */
+      if (isChecked(f.path)) {
+        var v = rev.profile ? rev.profile[f.key] : null;
+        if (f.key === 'contacts') out.profile.contacts = clone(v || []);
+        else out.profile[f.key] = v == null ? '' : v;
+        applied++;
+      } else if (!rev._fromCurrent) {
+        /* 没勾 = 不要这一项 → 清掉，避免粘的文本里没有却出现在简历里 */
+        if (f.key === 'contacts') out.profile.contacts = [];
+        else out.profile[f.key] = '';
+        applied++;
+      }
+    });
+    /* 头像不参与识别，只跟随面板里的编辑 */
+    if (rev.profile && rev.profile.avatar) out.profile.avatar = rev.profile.avatar;
+
+    if (isChecked('scores') && rev.scores) { out.scores = clone(rev.scores); applied++; }
+    else if (!rev._fromCurrent && rev.scores === null) { delete out.scores; }
+
+    /* ---------- 区块 ---------- */
+    var finalSections = [];
+    var seen = {};
+    entries.forEach(function (entry) {
+      var sec = entry.section;
+      if (!sec || !sec.id || seen[sec.id]) return;
+      seen[sec.id] = 1;
+
+      var pagePath = 'section.' + sec.id;
+      var checked = isChecked(pagePath);
+      var version = panelView(entry, entries, rev);
+
+      var next = toSection(version);
+      var n = (next.items && next.items.length) || (next.groups && next.groups.length) || 0;
+
+      if (!checked) {
+        /* 不显示：内容保留，只打 hidden 标记 */
+        next.hidden = true;
+        if (n) finalSections.push(next);
+        applied++;
+        return;
+      }
+      delete next.hidden;
+      if (!n) return;                     /* 勾了但没内容 → 不添加空模块 */
+      finalSections.push(next);
+      applied++;
+    });
+
+    out.sections = finalSections;
+    return { data: out, applied: applied };
+  }
+
+  /** 面板里那一项的当前版本（被人改过就用改过的） */
+  function panelView(entry, entries, rev) {
+    var sec = entry.section;
+    if (state.edited['section.' + sec.id]) {
+      if (state.sectionEdits[sec.id]) return state.sectionEdits[sec.id];
+      var hit = null;
+      entries.forEach(function (e) {
+        if (e.section && e.section.id === sec.id) hit = e.section;
+      });
+      if (hit) return hit;
+    }
+    return sec;
+  }
+
   /* ============================================================ 草稿与预览 */
 
   function rebuildDraft() {
-    var draft = clone(Store.load());
-
-    if (state.review) {
-      var rev = state.review;
-
-      if (isChecked('profile.name') && rev.profile.name) draft.profile.name = rev.profile.name;
-      if (isChecked('profile.headline') && rev.profile.headline) draft.profile.headline = rev.profile.headline;
-      if (isChecked('profile.intent') && rev.profile.intent) draft.profile.intent = rev.profile.intent;
-      if (isChecked('profile.contacts') && rev.profile.contacts && rev.profile.contacts.length) {
-        draft.profile.contacts = clone(rev.profile.contacts);
-      }
-      if (isChecked('scores') && rev.scores) draft.scores = clone(rev.scores);
-
-      /* rev 来自当前数据（没有识别结果）时，预览就是当前内容，供直接编辑对照 */
-      if (!rev._fromCurrent) {
-        var accepted = [];
-        rev.sections.forEach(function (sec) {
-          if (!isChecked('section.' + sec.id)) return;
-          var n = (sec.items && sec.items.length) || (sec.groups && sec.groups.length) || 0;
-          if (!n) return;
-          accepted.push(toSection(sec));
-        });
-        /* 预览**只**反映本次识别到并被勾选的内容。
-           未识别到的模块不删（应用时也保留），但不出现在预览里 ——
-           否则预览混着旧内容，看起来像是这次识别出来的。 */
-        draft.sections = accepted;
-
-        /* 本次识别里没有「成绩」这一段时，也把它从预览里去掉，保持一致 */
-        if (!rev.scores) delete draft.scores;
-      }
+    if (!state.review) {
+      state.draft = clone(Store.load());
+    } else {
+      /* 预览就是「应用后的结果」，跟应用共用同一套换算 */
+      state.draft = computeResult(Store.load()).data;
     }
-
-    state.draft = draft;
     renderMini();
     updateMiniBadge();
   }
@@ -922,63 +1014,11 @@
   /* ================================================================== 应用 */
 
   function applyReview() {
-    var rev = reviewSource();
     var before = Store.load();
-    var next = clone(before);
-    var applied = 0;
-
-    /* 没有识别结果时，面板里的值就在当前数据上；有识别结果时只有识别到的那些 */
-    var mergeSource = rev._fromCurrent ? before.sections : rev.sections;
-    /* 面板实际渲染的就是这份合并列表；编辑结果写在这上面的对象里 */
-    var panelEntries = mergeSections(before.sections, mergeSource);
-
-    /* 未识别到的模块在面板里是**空**的，那只是「没回填」，不代表要把原内容清掉。
-       所以只有被人真正编辑过的字段才采用面板里的值，其余一律保留原数据。 */
-    function panelView(sec) {
-      if (!sec || !state.edited['section.' + sec.id]) return sec;
-      /* 面板里手动改过的内容优先 */
-      if (state.sectionEdits[sec.id]) return state.sectionEdits[sec.id];
-      var hit = null;
-      panelEntries.forEach(function (e) { if (e.section && e.section.id === sec.id) hit = e.section; });
-      return hit || sec;
-    }
-
-    if (isChecked('profile.name') && rev.profile.name && rev.profile.name !== before.profile.name) {
-      next.profile.name = rev.profile.name; applied++;
-    }
-    if (isChecked('profile.headline') && rev.profile.headline) { next.profile.headline = rev.profile.headline; applied++; }
-    if (isChecked('profile.intent') && rev.profile.intent) { next.profile.intent = rev.profile.intent; applied++; }
-    if (isChecked('profile.contacts') && rev.profile.contacts && rev.profile.contacts.length) {
-      next.profile.contacts = clone(rev.profile.contacts); applied++;
-    }
-    if (isChecked('scores') && rev.scores) { next.scores = clone(rev.scores); applied++; }
-
-    /* 面板里列出的是「全部模块」（现有 + 本次识别），按合并后的列表走。
-       每个模块都要留在结果里，区别只是用哪一份内容：
-         · 勾选（或已编辑）→ 用面板/识别结果里的版本
-         · 没勾选        → 保留原数据，**不能删掉**
-       早先这里是「只把勾选的收进 accepted 再整体替换」，导致没勾的模块被静默删除。
-       未识别到的模块在面板里是空的，那只是「没回填」，绝不等于要清空。 */
-    var finalSections = [];
-    panelEntries.forEach(function (entry) {
-      var sec = entry.section;
-      var checked = isChecked('section.' + sec.id);
-      var version = panelView(sec);
-
-      if (!checked) {
-        finalSections.push(toSection(entry.fromParse ? version : sec));
-        return;
-      }
-      /* 勾了但没输入过内容、且本来就没识别到 → 原样保留，避免写成空模块 */
-      var n = (version.items && version.items.length) || (version.groups && version.groups.length) || 0;
-      if (!n && !entry.fromParse) {
-        finalSections.push(toSection(sec));
-        return;
-      }
-      if (!n) return;                       /* 识别到但是空的，本来就不该新增 */
-      finalSections.push(toSection(version));
-      applied++;
-    });
+    /* 跟预览用同一个换算函数，保证「预览看到的就是应用后的结果」 */
+    var res = computeResult(before);
+    var next = res.data;
+    var applied = res.applied;
 
     if (!applied) {
       status(els.applyStatus, '没有勾选任何内容', 'err');
@@ -986,7 +1026,6 @@
       els.applyStatus.classList.add('is-err');
       return;
     }
-    next.sections = finalSections;
 
     Store.save(next);
     Store.pushUndo(before);

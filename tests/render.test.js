@@ -123,6 +123,48 @@ console.log('\n══════ 标签页标题派生 ══════');
     '6.4 去掉 meta.title 后按 profile.name 兜底');
 }
 
+/* 7. hidden 区块不应渲染：取消勾选 = 不显示，而不是删数据 */
+{
+  const { Render, doc } = makeEnv();
+
+  function sectionTitles(data) {
+    const root = doc.createElement('main');
+    Render.renderInto(root, data, {});
+    return root.children.filter(n => n.className === 'resume-section')
+      .map(n => {
+        /* el(tag, cls, html) 第三个参数写的是 innerHTML，桩件也照此实现 */
+        const h2 = n.children[0];
+        return (h2 && (h2.innerHTML || h2.textContent)) || '';
+      });
+  }
+
+  const base = {
+    meta: {}, profile: { name: '示例姓名' },
+    sections: [
+      { id: 'a', title: '教育背景', sort: 'list', items: [{ title: 'x', text: 'y' }] },
+      { id: 'b', title: '项目经历', sort: 'list', items: [{ title: 'x', text: 'y' }] }
+    ]
+  };
+  ok(sectionTitles(base).length === 2, '7.1 两个区块都应渲染',
+    JSON.stringify(sectionTitles(base)));
+
+  const withHidden = JSON.parse(JSON.stringify(base));
+  withHidden.sections[1].hidden = true;
+  const titles = sectionTitles(withHidden);
+  ok(titles.length === 1, '7.2 标了 hidden 的区块不应渲染', JSON.stringify(titles));
+  ok(titles[0] === '教育背景', '7.3 该渲染的仍是可见的那个', titles[0]);
+
+  /* hidden: false 与没有该字段等价 */
+  const explicitFalse = JSON.parse(JSON.stringify(base));
+  explicitFalse.sections[1].hidden = false;
+  ok(sectionTitles(explicitFalse).length === 2, '7.4 hidden:false 应正常渲染');
+
+  /* 全部 hidden → 不应崩，也不应渲染任何区块 */
+  const allHidden = JSON.parse(JSON.stringify(base));
+  allHidden.sections.forEach(s => { s.hidden = true; });
+  ok(sectionTitles(allHidden).length === 0, '7.5 全部隐藏时不应渲染区块');
+}
+
 console.log('\n' + '═'.repeat(60));
 console.log(`  通过 ${pass} 项，失败 ${fail} 项`);
 if (fail) { console.log('\n  失败明细：'); failures.forEach(f => console.log('   ✗ ' + f)); }

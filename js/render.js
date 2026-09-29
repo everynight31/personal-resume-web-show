@@ -249,8 +249,10 @@
 
     root.appendChild(renderHero(data));
 
+    /* hidden 的区块只是这次不显示，数据仍留在 store 里（设置里能看到、能删）。
+       这样「取消勾选某个区块」= 不显示，而不是把内容删掉。 */
     var sections = (data.sections || []).filter(function (s) {
-      if (!s) return false;
+      if (!s || s.hidden) return false;
       var n = (s.items && s.items.length) || (s.groups && s.groups.length) || 0;
       return n > 0;
     });

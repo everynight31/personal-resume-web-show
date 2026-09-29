@@ -292,7 +292,16 @@ console.log('\n══════ 校对面板结构 ══════');
 
   g._refresh();
   const before = summary.textContent;
-  ok(/应用全部/.test(before), '4.1 默认全选时摘要应显示「应用全部」', before);
+  /* 模板里没写「求职意向」，所以那个字段默认不勾，摘要应显示部分应用而不是「应用全部」——
+     这正是「本次没抽到的字段不预选」的行为 */
+  ok(/应用(全部)?\s*[\d/]*\s*项/.test(before), '4.1 摘要应说明应用了几项', before);
+  ok(/应用 4\/5 项|应用全部 5 项/.test(before), '4.1b 摘要应反映实际勾选数', before);
+
+  /* 把未抽到的字段也勾上，才应该变成「应用全部」 */
+  const allBoxes = g._body.descendants(n => n.className === 'check');
+  allBoxes.forEach(function (b) { b.checked = true; b.dispatch('change'); });
+  g._refresh();
+  ok(/应用全部 5 项/.test(summary.textContent), '4.1c 全部勾上后应显示「应用全部」', summary.textContent);
 
   /* 关掉一个字段的勾选 */
   const cb = g._body.children[0].descendants(n => n.className === 'check')[0];
@@ -381,11 +390,11 @@ console.log('\n══════ 校对面板结构 ══════');
   const eduBox = eduGroup.descendants(n => n.dataset && n.dataset.group)[0];
   ok(eduBox && eduBox.checked === true, '5.16 识别到的模块应默认勾选');
 
-  /* 5.17 说明文字此时应切换成「全部模块」的说法，并说明不会被改动 */
-  ok(/全部模块/.test(UI._reviewNotes()[0].textContent), '5.17 有识别结果时说明文字应换一种',
-    UI._reviewNotes()[0].textContent);
-  ok(/不会/.test(UI._reviewNotes()[0].textContent), '5.18 说明文字应写明未识别到的不会被改动',
-    UI._reviewNotes()[0].textContent);
+  /* 5.17 说明文字应讲清「勾选 = 这一项要不要出现在简历里」 */
+  const note5 = UI._reviewNotes()[0].textContent;
+  ok(/勾选/.test(note5), '5.17 有识别结果时说明文字应解释勾选的含义', note5);
+  ok(/简历/.test(note5), '5.18 说明文字应说明勾选与简历显示的关系', note5);
+  ok(/设置/.test(note5), '5.19 说明文字应提示模块可以去设置里删', note5);
 }
 
 /* 5b. 未识别到的模块：输入后才自动勾上，且内容能存下来 */
