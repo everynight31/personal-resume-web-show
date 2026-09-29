@@ -17,8 +17,9 @@ const GIVEN = '明伟芳娜秀英敏静丽强磊洋艳勇军杰娟涛超霞平�
 const NAME_LIKE = new RegExp('[' + SURNAME + '][' + GIVEN + '][' + GIVEN + ']?', 'g');
 
 /* 姓名拼音：邮箱、账号、文件名里最容易漏掉的一种泄漏。
-   规则：常见姓氏拼音 + 常见名字拼音，拼在一起算命中（chenxiao / zhangwei）。
-   这条是补漏加的 —— 之前有个测试用例用了 chenxiao@test.com，中文规则查不出来。 */
+   规则：常见姓氏拼音 + 常见名字拼音，拼在一起算命中（例如 xingming 那种组合）。
+   这条是补漏加的 —— 之前有个测试用例用了真实姓名拼音的邮箱，中文规则查不出来。
+   注意：这个文件本身不要写出真实的拼音姓名示例，否则它自己就成了泄漏源。 */
 const SURNAME_PY = 'zhao|qian|sun|li|zhou|wu|zheng|wang|feng|chen|chu|wei|jiang|shen|han|yang|' +
   'zhu|qin|you|xu|he|lv|lu|shi|zhang|kong|cao|yan|hua|jin|wei|tao|jiang|huang|xu|gao|ma|liu|guo|lin|xie';
 const GIVEN_PY = 'ming|wei|fang|na|xiu|ying|min|jing|li|qiang|lei|yang|yan|yong|jun|jie|juan|tao|' +
