@@ -101,6 +101,8 @@
   var state = {
     review: null,        /* 当前识别结果（值可能是字符串/数组/对象） */
     checked: {},         /* path -> boolean，默认全选 */
+    edited: {},          /* path -> true，表示这个字段被手动改过 */
+    sectionEdits: {},    /* sectionId -> 该模块的编辑结果（未识别到的模块会走到这里） */
     draft: null,         /* 用于实时预览的数据副本 */
     replaceSections: true,
     busy: 0,
@@ -476,6 +478,7 @@
     if (!els.reviewList) return;
     els.reviewList.innerHTML = '';
     state.checked = {};
+    state.edited = {};
 
     var rev = ensureReview();
 
@@ -488,8 +491,9 @@
         ])
       : noteLine([
           '列出了', { b: '全部模块' },
-          '：带「现有模块（本次未识别到）」标记的那些不会被这次识别改动，' +
-          '但仍可在这里就地编辑。只有勾选的才会应用。'
+          '：带「现有模块（本次未识别到）」标记的那些不会被这次识别改动 —— ' +
+          '它们的内容留空、默认不勾选，你不动它就不会被写回。' +
+          '想改的话直接在框里输入，输入后会自动勾上。'
         ]));
 
     /* ---------- 头部信息组 ---------- */
@@ -519,25 +523,35 @@
 
     /* ---------- 各内容区块 ----------
        这里显示简历的**全部**模块：本次识别出来的 + 简历里已有但这次没识别到的。
-       后者不会因为一次无关的粘贴而消失，也应该能在这里就地校对，
-       所以按「现有顺序为基准」合并后一起列出。
-       没有识别结果时（rev 来自当前数据），parsed 传空数组即可，
-       合并结果就是现有的全部模块。 */
-    var parsedSections = rev._fromCurrent ? [] : rev.sections;
+       后者列出来是为了让你能找到并修改它，但：
+         · 内容留空，不回填旧值（否则像是「识别到了」）
+         · 默认不勾选，不主动写回
+       所以一次无关的粘贴既不会弄丢模块，也不会把旧内容冒充成识别结果。
+       例外：没有识别结果时（rev 来自当前数据），面板就是个编辑器，
+       这时要把现有内容填进去、并默认勾上。 */
+    var fromCurrent = !!rev._fromCurrent;
+    var parsedSections = fromCurrent ? [] : rev.sections;
     mergeSections(Store.load().sections, parsedSections).forEach(function (entry) {
       var sec = entry.section;
       var path = 'section.' + sec.id;
-      var fields = [];
-      if (sec.sort === 'tags') {
-        fields.push({ path: path, label: '技能标签', value: sec.groups });
-      } else {
-        fields.push({ path: path, label: '内容', value: sec.items });
-      }
+      /* 未识别到（且不是「当前数据」模式）→ 值置空 */
+      var blank = !entry.fromParse && !fromCurrent;
+      var value = blank ? null : (sec.sort === 'tags' ? sec.groups : sec.items);
+      var fields = [{
+        path: path,
+        label: sec.sort === 'tags' ? '技能标签' : '内容',
+        value: value
+      }];
       var title = (sec.title || sectionTitleOf(sec.id));
       var tag = entry.fromParse
         ? (sec.src === 'inferred' ? '· 自动分段' : sec.src === 'llm' ? '· 大模型' : '')
         : '· 现有模块（本次未识别到）';
-      els.reviewList.appendChild(buildGroup(path, title + ' ' + tag, fields, sec, !entry.fromParse));
+      /* buildField 收到的这个对象，就是用户输入时 setPath 要写回去的对象，
+         所以必须跟 applyReview 取值的来源一致：
+           · 有识别结果 → 写进识别结果
+           · 当前数据模式 → 写进 state.review（它就是当前数据的副本） */
+      var editTarget = fromCurrent ? entry.section : sec;
+      els.reviewList.appendChild(buildGroup(path, title + ' ' + tag, fields, editTarget, blank));
     });
 
     /* ---------- 未归类文本 ---------- */
@@ -577,13 +591,18 @@
     return d;
   }
 
-  /* 一个可折叠的分组卡片：头部一行放「勾选框 + 标题 + 摘要」，避免标题被挤成竖排 */
+  /**
+   * 一个可折叠的分组卡片：头部一行放「勾选框 + 标题 + 摘要」，避免标题被挤成竖排
+   * @param {boolean} isExisting 该模块本次没识别到（内容空着、默认不勾选）
+   */
   function buildGroup(groupPath, title, fields, section, isExisting) {
     var group = document.createElement('div');
     group.className = 'review-group';
     /* 现有模块（本次没识别到）打个标记，一是便于区分，二是让测试能断言 */
     if (isExisting) group.classList.add('is-existing');
     group.dataset.groupPath = groupPath;
+    /* 未识别到的模块默认不勾选：列出来是为了让你能改，但不主动写回旧内容 */
+    var initiallyChecked = !isExisting;
 
     var filled = fields.filter(function (f) { return hasValue(f.value); }).length;
     var missing = fields.length - filled;
@@ -594,7 +613,7 @@
     var box = document.createElement('input');
     box.type = 'checkbox';
     box.className = 'check';
-    box.checked = true;
+    box.checked = initiallyChecked;
     box.dataset.group = groupPath;
     box.title = '整组全选 / 全不选';
     head.appendChild(box);
@@ -628,8 +647,11 @@
     var body = document.createElement('div');
     body.className = 'review-fields';
 
+    /* 未识别到的模块：先把勾选状态置为「不选」，再渲染字段，
+       否则 buildField 会把每一项都默认设为勾选，跟组头的未勾选状态对不上 */
+    if (isExisting) fields.forEach(function (f) { state.checked[f.path] = false; });
     fields.forEach(function (f) {
-      body.appendChild(buildField(f, section));
+      body.appendChild(buildField(f, section, initiallyChecked));
     });
 
     function refreshSummary() {
@@ -676,11 +698,12 @@
     return group;
   }
 
-  function buildField(field, section) {
+  function buildField(field, section, checked) {
     var meta = fieldMeta(field.path, section);
     var text = valueToText(field.path, field.value, section);
     var filled = hasValue(field.value);
-    state.checked[field.path] = true;
+    /* 已经由 buildGroup 决定过就不覆盖（未识别到的模块要默认不勾） */
+    if (state.checked[field.path] === undefined) state.checked[field.path] = checked !== false;
 
     var row = document.createElement('div');
     row.className = 'review-field' + (filled ? '' : ' is-missing');
@@ -694,7 +717,7 @@
     var cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.className = 'check';
-    cb.checked = true;
+    cb.checked = state.checked[field.path] !== false;
     cb.dataset.path = field.path;
     cb.title = '是否应用这一项';
     headRow.appendChild(cb);
@@ -739,6 +762,16 @@
     input.addEventListener('input', debounce(function () {
       var v = textToValue(input.value, field.path, section, field.value);
       setPath(state.review, field.path, v, section);
+      /* 记下「这个字段被人动过」：应用时只有动过的才用面板里的值，
+         否则未识别到的模块会被面板里的空值覆盖掉原有内容 */
+      state.edited[field.path] = true;
+      /* 未识别到的模块不属于 state.review.sections，它的编辑结果得单独存一份，
+         否则应用时会退回原数据，用户的输入就白输了 */
+      if (section && section.id && field.path === 'section.' + section.id) {
+        if (section.sort === 'tags') section.groups = clone(v);
+        else section.items = clone(v);
+        state.sectionEdits[section.id] = section;
+      }
       if (input.value.trim() && !cb.checked) {
         cb.checked = true;
         setChecked(field.path, true);
@@ -822,8 +855,7 @@
   /* ============================================================ 草稿与预览 */
 
   function rebuildDraft() {
-    var base = Store.load();
-    var draft = clone(base);
+    var draft = clone(Store.load());
 
     if (state.review) {
       var rev = state.review;
@@ -836,18 +868,23 @@
       }
       if (isChecked('scores') && rev.scores) draft.scores = clone(rev.scores);
 
-      var parsedIds = {};
-      var accepted = [];
-      rev.sections.forEach(function (sec) {
-        if (!isChecked('section.' + sec.id)) return;
-        var n = (sec.items && sec.items.length) || (sec.groups && sec.groups.length) || 0;
-        if (!n) return;
-        parsedIds[sec.id] = 1;
-        accepted.push(toSection(sec));
-      });
+      /* rev 来自当前数据（没有识别结果）时，预览就是当前内容，供直接编辑对照 */
+      if (!rev._fromCurrent) {
+        var accepted = [];
+        rev.sections.forEach(function (sec) {
+          if (!isChecked('section.' + sec.id)) return;
+          var n = (sec.items && sec.items.length) || (sec.groups && sec.groups.length) || 0;
+          if (!n) return;
+          accepted.push(toSection(sec));
+        });
+        /* 预览**只**反映本次识别到并被勾选的内容。
+           未识别到的模块不删（应用时也保留），但不出现在预览里 ——
+           否则预览混着旧内容，看起来像是这次识别出来的。 */
+        draft.sections = accepted;
 
-      var kept = (draft.sections || []).filter(function (s) { return !parsedIds[s.id]; });
-      draft.sections = accepted.concat(kept);
+        /* 本次识别里没有「成绩」这一段时，也把它从预览里去掉，保持一致 */
+        if (!rev.scores) delete draft.scores;
+      }
     }
 
     state.draft = draft;
@@ -890,13 +927,21 @@
     var next = clone(before);
     var applied = 0;
 
-    /* 面板渲染时列出的是合并结果（现有 + 本次识别）。
-       用户可能在面板里改了「本次没识别到」的模块 —— 那些改动写在 state.review 上，
-       所以要先按 id 取回面板里的版本，否则会把改动丢掉、写回旧数据。
-       没有识别结果时 state.review 就是当前数据的副本，取回它同样正确。 */
-    var panelById = {};
-    (rev.sections || []).forEach(function (s) { if (s && s.id) panelById[s.id] = s; });
-    function panelView(s) { return (s && panelById[s.id]) || s; }
+    /* 没有识别结果时，面板里的值就在当前数据上；有识别结果时只有识别到的那些 */
+    var mergeSource = rev._fromCurrent ? before.sections : rev.sections;
+    /* 面板实际渲染的就是这份合并列表；编辑结果写在这上面的对象里 */
+    var panelEntries = mergeSections(before.sections, mergeSource);
+
+    /* 未识别到的模块在面板里是**空**的，那只是「没回填」，不代表要把原内容清掉。
+       所以只有被人真正编辑过的字段才采用面板里的值，其余一律保留原数据。 */
+    function panelView(sec) {
+      if (!sec || !state.edited['section.' + sec.id]) return sec;
+      /* 面板里手动改过的内容优先 */
+      if (state.sectionEdits[sec.id]) return state.sectionEdits[sec.id];
+      var hit = null;
+      panelEntries.forEach(function (e) { if (e.section && e.section.id === sec.id) hit = e.section; });
+      return hit || sec;
+    }
 
     if (isChecked('profile.name') && rev.profile.name && rev.profile.name !== before.profile.name) {
       next.profile.name = rev.profile.name; applied++;
@@ -908,24 +953,30 @@
     }
     if (isChecked('scores') && rev.scores) { next.scores = clone(rev.scores); applied++; }
 
-    /* 面板里列出的是「全部模块」（现有 + 本次识别），所以这里也按合并后的列表走。
-       未勾选的区块保持原样不动 —— 一次无关的粘贴不会把已有模块弄丢。
-       未识别到、但已勾选的现有模块也会一并写回，这样在面板里就地补的内容能存下来。 */
-    var accepted = [];
-    var parsedForApply = rev._fromCurrent ? [] : rev.sections;
-    mergeSections(before.sections, parsedForApply).forEach(function (entry) {
+    /* 面板里列出的是「全部模块」（现有 + 本次识别），按合并后的列表走。
+       每个模块都要留在结果里，区别只是用哪一份内容：
+         · 勾选（或已编辑）→ 用面板/识别结果里的版本
+         · 没勾选        → 保留原数据，**不能删掉**
+       早先这里是「只把勾选的收进 accepted 再整体替换」，导致没勾的模块被静默删除。
+       未识别到的模块在面板里是空的，那只是「没回填」，绝不等于要清空。 */
+    var finalSections = [];
+    panelEntries.forEach(function (entry) {
       var sec = entry.section;
-      if (!isChecked('section.' + sec.id)) return;
-      if (!entry.fromParse) {
-        /* 现有模块：取面板里的版本（内容可能已就地编辑过） */
-        accepted.push(toSection(panelView(sec)));
-        applied++;
+      var checked = isChecked('section.' + sec.id);
+      var version = panelView(sec);
+
+      if (!checked) {
+        finalSections.push(toSection(entry.fromParse ? version : sec));
         return;
       }
-      var n = (sec.items && sec.items.length) || (sec.groups && sec.groups.length) || 0;
-      if (!n) return;
-      /* 识别到的模块同样取面板版本：用户在面板里改过的才是最终内容 */
-      accepted.push(toSection(panelView(sec)));
+      /* 勾了但没输入过内容、且本来就没识别到 → 原样保留，避免写成空模块 */
+      var n = (version.items && version.items.length) || (version.groups && version.groups.length) || 0;
+      if (!n && !entry.fromParse) {
+        finalSections.push(toSection(sec));
+        return;
+      }
+      if (!n) return;                       /* 识别到但是空的，本来就不该新增 */
+      finalSections.push(toSection(version));
       applied++;
     });
 
@@ -935,18 +986,7 @@
       els.applyStatus.classList.add('is-err');
       return;
     }
-
-    if (state.replaceSections && accepted.length) {
-      next.sections = accepted;
-    } else if (accepted.length) {
-      var byId = {};
-      accepted.forEach(function (s) { byId[s.id] = s; });
-      var merged = (next.sections || []).map(function (s) { return byId[s.id] || s; });
-      accepted.forEach(function (s) {
-        if (!merged.some(function (m) { return m.id === s.id; })) merged.push(s);
-      });
-      next.sections = merged;
-    }
+    next.sections = finalSections;
 
     Store.save(next);
     Store.pushUndo(before);

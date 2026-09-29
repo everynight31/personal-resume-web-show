@@ -361,15 +361,76 @@ console.log('\n══════ 校对面板结构 ══════');
     '5.9 标题里应写明「现有模块（本次未识别到）」',
     paperGroup.descendants(n => n.className === 'group-title')[0].textContent);
 
-  /* 5.10 面板仍能读到自建模块的内容（可编辑） */
+  /* 5.10 未识别到的模块：内容留空、默认不勾选（只列出来，不冒充识别结果） */
   const area = paperGroup._body.descendants(n => n.tagName === 'TEXTAREA')[0];
-  ok(!!area && area.value.indexOf('一篇') !== -1, '5.10 自建模块的内容应可在面板里编辑',
-    area ? area.value : '(无输入框)');
+  ok(!!area, '5.10 未识别到的模块仍应给出可编辑输入框');
+  ok(area.value === '', '5.11 未识别到的模块内容应留空，不回填旧值', JSON.stringify(area.value));
 
-  /* 5.11 说明文字此时应切换成「全部模块」的说法 */
-  ok(/全部模块/.test(UI._reviewNotes()[0].textContent), '5.11 有识别结果时说明文字应换一种',
+  const groupBox = paperGroup.descendants(n => n.dataset && n.dataset.group)[0];
+  ok(groupBox && groupBox.checked === false, '5.12 未识别到的模块默认不勾选（不要选）');
+  ok(UI._state.checked['section.custom-papers'] === false,
+    '5.13 未识别到的模块勾选状态应为 false');
+  ok(paperGroup.classList.contains('is-unchecked'),
+    '5.14 未识别到的模块应加 is-unchecked 便于弱化显示');
+
+  /* 5.15 识别到的模块照旧预填、默认勾选 */
+  const eduGroup = groups.filter(g =>
+    g.descendants(n => n.className === 'group-title')[0].textContent.indexOf('教育背景') !== -1)[0];
+  const eduArea = eduGroup._body.descendants(n => n.tagName === 'TEXTAREA')[0];
+  ok(eduArea.value.indexOf('新的大学') !== -1, '5.15 识别到的模块应预填识别结果', eduArea.value);
+  const eduBox = eduGroup.descendants(n => n.dataset && n.dataset.group)[0];
+  ok(eduBox && eduBox.checked === true, '5.16 识别到的模块应默认勾选');
+
+  /* 5.17 说明文字此时应切换成「全部模块」的说法，并说明不会被改动 */
+  ok(/全部模块/.test(UI._reviewNotes()[0].textContent), '5.17 有识别结果时说明文字应换一种',
+    UI._reviewNotes()[0].textContent);
+  ok(/不会/.test(UI._reviewNotes()[0].textContent), '5.18 说明文字应写明未识别到的不会被改动',
     UI._reviewNotes()[0].textContent);
 }
+
+/* 5b. 未识别到的模块：输入后才自动勾上，且内容能存下来 */
+console.log('\n-- 未识别到的模块：输入即勾选 --');
+const unparsedEditDone = (async function () {
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const win = makeEnv();
+  const UI = win.ResumeUI, Store = win.ResumeStore;
+
+  const seeded = Store.load();
+  seeded.sections = [
+    { id: 'education', title: '教育背景', sort: 'list', items: [{ title: '学历', text: '示例大学' }] },
+    { id: 'custom-papers', title: '发表论文', sort: 'list', items: [{ title: '论文', text: '一篇重要的论文' }] }
+  ];
+  Store.save(seeded);
+
+  /* 本次只识别到 education，custom-papers 没识别到 */
+  UI._setReview({
+    profile: {}, sections: [{
+      id: 'education', title: '教育背景', sort: 'list', anchor: 'education',
+      items: [{ title: '学历', text: '新的大学' }]
+    }],
+    unparsed: [], warnings: []
+  });
+  UI._renderReviewForTest();
+
+  const paperGroup = UI._reviewGroups().filter(g =>
+    g.descendants(n => n.className === 'group-title')[0].textContent.indexOf('发表论文') !== -1)[0];
+  const area = paperGroup._body.descendants(n => n.tagName === 'TEXTAREA')[0];
+
+  area.value = '深度学习图像分割 · 一作 · 2025';
+  area.dispatch('input');
+  await wait(500);
+
+  ok(UI._state.edited['section.custom-papers'] === true, '5b.1 输入后应记为「已编辑」');
+  ok(UI._state.checked['section.custom-papers'] === true, '5b.2 输入后应自动勾上');
+
+  UI._applyReviewForTest();
+  const after = Store.load();
+  const papers = after.sections.filter(s => s.id === 'custom-papers')[0];
+  ok(!!papers, '5b.3 应用后模块仍存在');
+  ok(/深度学习图像分割/.test(JSON.stringify(papers.items)), '5b.4 手动补的内容应被保存',
+    JSON.stringify(papers.items));
+  ok(after.sections.length === 2, '5b.5 模块总数不应变化', String(after.sections.length));
+})();
 
 /* 6. 应用时不能把「本次没识别到的模块」弄丢 */
 {
@@ -459,7 +520,7 @@ const panelEditDone = (async function () {
     '7.7 没动过的模块内容应原样保留');
 })();
 
-Promise.resolve(panelEditDone).then(function () {
+Promise.resolve(panelEditDone).then(function () { return unparsedEditDone; }).then(function () {
   console.log('\n' + '═'.repeat(60));
   console.log(`  通过 ${pass} 项，失败 ${fail} 项`);
   if (fail) { console.log('\n  失败明细：'); failures.forEach(f => console.log('   ✗ ' + f)); }
