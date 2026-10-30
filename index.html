@@ -27,6 +27,7 @@
 </head>
 
 <body>
+<div id="recovery-notice" role="status" class="recovery-notice" hidden></div>
 <!-- 动态背景（水面、星光、水墨、云雾、花瓣等，零外部依赖） -->
 <canvas id="particle-canvas" aria-hidden="true"></canvas>
 
@@ -169,6 +170,11 @@
         <input type="password" id="llm-key" placeholder="sk-..." autocomplete="off" spellcheck="false">
       </div>
 
+      <div class="field">
+        <label><input type="checkbox" id="llm-redact" checked> 发送前隐藏手机号和邮箱（本地还原，默认开启）</label>
+        <p class="hint">姓名、学校和经历等其他内容仍会发送到所配置的接口。</p>
+      </div>
+
       <div class="field-row">
         <div class="field">
           <label for="llm-base">Base URL</label>
@@ -264,10 +270,11 @@
     <section class="setting-group">
       <h3>数据管理</h3>
       <p class="hint">
-        页面数据 = <code>data.js</code> 默认值 + 你在网页上的修改（存在浏览器 localStorage）。
+        本地修改以完整快照保存在浏览器 localStorage；没有快照时才使用 <code>data.js</code> 默认值。版本更新会先备份再迁移，已删除字段不会被默认值补回。
         换电脑或清缓存前记得导出备份。
       </p>
       <div class="btn-row">
+        <button type="button" id="btn-export-old" class="btn ghost">导出旧数据 / 迁移备份</button>
         <button type="button" id="btn-export" class="btn ghost">导出 JSON</button>
         <button type="button" id="btn-import" class="btn ghost">导入 JSON</button>
         <input type="file" id="import-input" accept=".json,application/json" hidden>
@@ -283,7 +290,7 @@
         提供流动水面、星光漫游、水墨晕染、云海晨雾、风吹花瓣等 11 个背景选项（含关闭），搭配对应文字主题，支持深浅模式、手机布局和系统「减少动态效果」。
       </p>
       <p class="hint">
-        双击 <code>index.html</code> 即可运行。默认在本机处理；启用「大模型增强识别」后，会将待识别文本发送到配置的模型接口。
+        支持旧数据迁移备份与导出、会话内多步撤销及模型调用前的可选联系方式脱敏。双击 <code>index.html</code> 即可运行。默认在本机处理；启用「大模型增强识别」后，会将待识别文本发送到配置的模型接口。
         首页「打印 / 导出 PDF」可打开打印窗口，自动隐藏工具界面并使用 A4 排版；校对中的草稿需先应用。
       </p>
     </section>

@@ -13,7 +13,8 @@
   var DEFAULTS = {
     baseUrl: 'https://api.deepseek.com',
     model: 'deepseek-chat',
-    timeoutMs: 60000
+    timeoutMs: 60000,
+    redactContacts: true
   };
 
   /* 给模型的字段说明：与 data.js 的结构一一对应 */
@@ -66,65 +67,68 @@
    * @param {Object} cfg { apiKey, baseUrl, model, timeoutMs }
    * @returns {Promise<Object>} Review 结构
    */
+  function requestJSON(conf, body) {
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer;
+    var timeout = new Promise(function (_, reject) {
+      timer = setTimeout(function () {
+        reject(new Error('请求超时，请检查接口后重试'));
+        if (controller) controller.abort();
+      }, conf.timeoutMs || DEFAULTS.timeoutMs);
+    });
+    var request = Promise.resolve().then(function () { return fetch(joinUrl(conf.baseUrl, '/chat/completions'), {
+      method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer ' + conf.apiKey},
+      body:JSON.stringify(body), signal:controller ? controller.signal : undefined
+    }); }).then(function (res) { return res.text().then(function (raw) {
+      if (!res.ok) { var error = new Error('接口返回 ' + res.status + '：' + raw.slice(0,200)); error.status = res.status; throw error; }
+      try { return JSON.parse(raw); } catch (_) { throw new Error('接口返回的不是 JSON'); }
+    }); });
+    return Promise.race([request,timeout]).finally(function () { clearTimeout(timer); });
+  }
+
+  function maskContacts(text) {
+    var replacements = [], prefix = '__RESUME_CONTACT_';
+    while (text.indexOf(prefix) !== -1) prefix += '_';
+    function token(value,label) { var key=prefix+replacements.length+'__'; replacements.push({key:key,value:value,label:label}); return key; }
+    var masked = text.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,function (value) { return token(value,'邮箱'); });
+    masked = masked.replace(/(^|[^\d])((?:\+?86[\s-]*)?1[3-9]\d(?:[\s-]?\d){8})(?!\d)/g,function (_,lead,value) { return lead + token(value,'电话'); });
+    function restore(value) {
+      if (typeof value === 'string') { replacements.forEach(function (entry) { value=value.split(entry.key).join(entry.value); }); return value; }
+      if (Array.isArray(value)) return value.map(restore);
+      if (value && typeof value === 'object') { var out={}; Object.keys(value).forEach(function (key) { if (['__proto__','constructor','prototype'].indexOf(key)===-1) out[key]=restore(value[key]); }); return out; }
+      return value;
+    }
+    return {text:masked,restore:restore,contacts:replacements};
+  }
+
   function parseWithLLM(text, cfg) {
     var conf = Object.assign({}, DEFAULTS, cfg || {});
     if (!conf.apiKey) return Promise.reject(new Error('没有填写 API Key'));
     if (!String(text || '').trim()) return Promise.reject(new Error('粘贴内容为空'));
-
+    var masked = maskContacts(String(text));
     var body = {
-      model: conf.model,
-      temperature: 0,
-      stream: false,
-      messages: [
-        { role: 'system', content: SCHEMA_PROMPT },
-        { role: 'user', content: '请抽取下面这份简历：\n\n' + text }
-      ]
+      model:conf.model,temperature:0,stream:false,response_format:{type:'json_object'},
+      messages:[{role:'system',content:SCHEMA_PROMPT + '\n请原样保留 __RESUME_CONTACT_ 开头的联系方式占位符。'},
+        {role:'user',content:'请抽取下面这份简历：\n\n' + (conf.redactContacts ? masked.text : text)}]
     };
-
-    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    var timer = controller ? setTimeout(function () { controller.abort(); }, conf.timeoutMs || DEFAULTS.timeoutMs) : null;
-
-    var t0 = nowMs();
-    return fetch(joinUrl(conf.baseUrl, '/chat/completions'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + conf.apiKey
-      },
-      body: JSON.stringify(body),
-      signal: controller ? controller.signal : undefined
-    }).then(function (res) {
-      return res.text().then(function (raw) {
-        if (!res.ok) {
-          var detail = raw;
-          try {
-            var j = JSON.parse(raw);
-            detail = (j.error && (j.error.message || j.error.type)) || raw;
-          } catch (e) { /* 保持原文 */ }
-          throw new Error('接口返回 ' + res.status + '：' + String(detail).slice(0, 300));
-        }
-        var data;
-        try { data = JSON.parse(raw); } catch (e) { throw new Error('接口返回的不是 JSON'); }
-        var content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-        if (!content) throw new Error('接口返回里没有内容');
-        return {
-          content: content,
-          elapsed: nowMs() - t0,
-          usage: data.usage || null
-        };
+    var started = nowMs();
+    return requestJSON(conf,body).catch(function (error) {
+      if ([400,415,422].indexOf(error.status) !== -1 && /response_format|json_object|unsupported|不支持/i.test(error.message)) {
+        delete body.response_format;
+        return requestJSON(conf,body);
+      }
+      throw error;
+    }).then(function (data) {
+      var content=data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+      if (!content) throw new Error('接口返回里没有内容');
+      var obj=extractJSON(content);
+      var review=normalizeReview(conf.redactContacts ? masked.restore(obj) : obj,text);
+      if (conf.redactContacts) masked.contacts.forEach(function (entry) {
+        var value=entry.label==='电话' ? entry.value.replace(/^\+?86[\s-]*/, '').replace(/[\s-]/g,'') : entry.value;
+        if (!review.profile.contacts.some(function (c) { return c.value===value || c.value===entry.value; })) review.profile.contacts.push({label:entry.label,value:value,href:defaultHref(entry.label,value),icon:entry.label==='电话'?'phone':'mail'});
       });
-    }).then(function (r) {
-      var review = normalizeReview(extractJSON(r.content), text);
-      review.mode = 'llm';
-      review.elapsed = r.elapsed;
-      review.usage = r.usage;
-      review.quality = scoreLLM(review);
+      review.mode='llm';review.elapsed=nowMs()-started;review.usage=data.usage||null;review.quality=scoreLLM(review);
       return review;
-    }).catch(function (err) {
-      if (err && err.name === 'AbortError') throw new Error('请求超时（' + Math.round((conf.timeoutMs || DEFAULTS.timeoutMs) / 1000) + ' 秒）');
-      throw err;
-    }).finally(function () {
-      if (timer) clearTimeout(timer);
     });
   }
 
@@ -164,7 +168,7 @@
       profile.contacts.push({
         label: label,
         value: value,
-        href: str(c.href) || defaultHref(label, value),
+        href: global.ResumeHelpers && typeof global.ResumeHelpers.safeHref === 'function' ? global.ResumeHelpers.safeHref(str(c.href) || defaultHref(label, value)) : '',
         icon: str(c.icon) || ICON_BY_LABEL[label] || 'spark'
       });
     });
@@ -181,11 +185,13 @@
     }
 
     var sections = [];
+    var usedIds = Object.create(null);
     (Array.isArray(obj && obj.sections) ? obj.sections : []).forEach(function (s) {
       if (!s) return;
       var sort = SORTS[s.sort] ? s.sort : 'list';
       var sec = {
-        id: str(s.id) || ('custom-' + sections.length),
+        id: global.ResumeHelpers && typeof global.ResumeHelpers.sectionId === 'function' ? global.ResumeHelpers.sectionId(str(s.id),usedIds) : 'sec-' + sections.length,
+        kind: str(s.id).toLowerCase().replace(/[^a-z0-9-]/g,'-'),
         title: str(s.title) || '未命名区块',
         sort: sort,
         src: 'llm'
@@ -207,7 +213,7 @@
             date: str(it && it.date),
             degree: str(it && it.degree),
             location: str(it && it.location),
-            logo: str(it && it.logo),
+            logo: global.ResumeHelpers && typeof global.ResumeHelpers.safeImageSrc === 'function' ? global.ResumeHelpers.safeImageSrc(it && it.logo) : '',
             bullets: (Array.isArray(it && it.bullets) ? it.bullets : []).map(str).filter(Boolean)
           };
         }).filter(function (it) { return it.org || it.degree; });
@@ -218,7 +224,7 @@
             date: str(it && it.date),
             title: str(it && it.title),
             location: str(it && it.location),
-            logo: str(it && it.logo),
+            logo: global.ResumeHelpers && typeof global.ResumeHelpers.safeImageSrc === 'function' ? global.ResumeHelpers.safeImageSrc(it && it.logo) : '',
             blocks: (Array.isArray(it && it.blocks) ? it.blocks : []).map(function (b) {
               return { label: str(b && b.label), text: str(b && b.text) };
             }).filter(function (b) { return b.label || b.text; })
@@ -260,15 +266,10 @@
     if (review.profile.name) hits++;
     if (review.profile.contacts.length) hits++;
     if (review.profile.intent || review.scores) hits++;
-    if (review.sections.some(function (s) { return s.id === 'education'; })) hits++;
-    if (review.sections.some(function (s) { return s.id === 'projects' || s.sort === 'cards'; })) hits++;
+    if (review.sections.some(function (s) { return (s.kind || s.id) === 'education'; })) hits++;
+    if (review.sections.some(function (s) { return (s.kind || s.id) === 'projects' || s.sort === 'cards'; })) hits++;
     if (review.sections.some(function (s) { return s.sort === 'tags' || s.sort === 'list'; })) hits++;
-    var score = hits / total;
-    return {
-      score: Math.round(score * 100),
-      label: score >= 0.85 ? '大模型识别良好' : score >= 0.6 ? '大模型识别基本可用' : '大模型识别不完整，请核对',
-      hits: hits, lines: total, mode: 'llm'
-    };
+    return global.ResumeHelpers && typeof global.ResumeHelpers.qualityResult === 'function' ? global.ResumeHelpers.qualityResult(hits,total,'llm') : {score:Math.round(hits/total*100),label:'请核对识别结果',hits:hits,lines:total,mode:'llm'};
   }
 
   /** 连通性自检：发一条极短请求，只验证鉴权与网络 */
@@ -276,25 +277,8 @@
     var conf = Object.assign({}, DEFAULTS, cfg || {});
     if (!conf.apiKey) return Promise.reject(new Error('没有填写 API Key'));
     var t0 = nowMs();
-    return fetch(joinUrl(conf.baseUrl, '/chat/completions'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + conf.apiKey },
-      body: JSON.stringify({
-        model: conf.model,
-        stream: false,
-        max_tokens: 4,
-        messages: [{ role: 'user', content: '回复两个字：可用' }]
-      })
-    }).then(function (res) {
-      return res.text().then(function (raw) {
-        if (!res.ok) {
-          var detail = raw;
-          try { var j = JSON.parse(raw); detail = (j.error && (j.error.message || j.error.type)) || raw; } catch (e) { /* 原文 */ }
-          throw new Error('HTTP ' + res.status + '：' + String(detail).slice(0, 200));
-        }
-        return { ok: true, elapsed: nowMs() - t0 };
-      });
-    });
+    return requestJSON(conf,{ model:conf.model,stream:false,max_tokens:4,messages:[{role:'user',content:'回复两个字：可用'}] })
+      .then(function () { return {ok:true,elapsed:nowMs()-t0}; });
   }
 
   global.ResumeLLM = {

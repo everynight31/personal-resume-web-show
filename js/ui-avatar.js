@@ -143,7 +143,7 @@
     els.avatarPreview.innerHTML = '';
     if (src) {
       var img = document.createElement('img');
-      img.src = src;
+      img.src = H.safeImageSrc ? H.safeImageSrc(src) : '';
       img.alt = '头像预览';
       els.avatarPreview.appendChild(img);
       if (els.avatarInfo) {

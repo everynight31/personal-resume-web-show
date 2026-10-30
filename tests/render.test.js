@@ -59,8 +59,40 @@ function makeEnv() {
   });
 
   const sandbox = vm.createContext(win);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/helpers.js'), 'utf8'), sandbox);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/render.js'), 'utf8'), sandbox, { filename: 'render.js' });
   return { Render: sandbox.ResumeRender, doc, win };
+}
+
+{
+  const {Render,doc}=makeEnv();
+  ['javascript:alert(1)',' JaVaScRiPt:alert(1)','java\nscript:alert(1)','data:text/html,<script>','//example.com'].forEach(value=>ok(Render.safeHref(value)==='', '危险协议被拒绝：'+value));
+  ['https://example.com','http://example.com','mailto:test@example.com','tel:13800000000'].forEach(value=>ok(Render.safeHref(value)===value,'允许安全联系方式协议'));
+  ok(Render.safeImageSrc('javascript:alert(1)')==='','头像脚本协议被拒绝');
+  ok(Render.safeImageSrc('data:image/svg+xml,<svg onload=alert(1)>')==='','拒绝任意 SVG data 内容');
+  ok(Render.safeImageSrc('assets/avatar.svg')==='assets/avatar.svg','保留项目自带头像');
+  const target=doc.createElement('main');
+  Render.renderInto(target,{profile:{name:'测试',contacts:[{value:'网站',href:'javascript:alert(1)'}]},sections:[]},{animate:false});
+  function descendants(node){return [node].concat(...node.children.map(descendants));}
+  ok(!descendants(target).some(node=>node.tagName==='A'&&/^javascript:/i.test(node.href||'')),'实际渲染不会生成危险链接');
+}
+
+{
+  const {Render,doc,win}=makeEnv();
+  const pending=new Map();let next=0,observer;
+  win.setTimeout=fn=>{pending.set(++next,fn);return next;};win.clearTimeout=id=>pending.delete(id);
+  win.IntersectionObserver=function(callback){observer=this;this.callback=callback;this.observe=()=>{};this.unobserve=()=>{};this.disconnect=()=>{this.disconnected=true;};};
+  const create=doc.createElement;
+  doc.createElement=tag=>{const node=create(tag);node.events={};node.classList={add(){},remove(){}};node.addEventListener=(name,fn)=>{node.events[name]=fn;};node.removeEventListener=name=>{delete node.events[name];};node.getBoundingClientRect=()=>({top:2000});return node;};
+  const root=doc.createElement('main');root.querySelectorAll=()=>root.children.filter(n=>n.className==='resume-section');
+  Render.renderInto(root,{profile:{name:'测试',contacts:[]},sections:[{id:'test',sort:'list',items:[{text:'test'}]}]},{animate:true});
+  observer.callback([{target:root.querySelectorAll()[0],isIntersecting:true}]);
+  ok(pending.size===1,'进入动画时仅创建一个保险定时器');
+  root.querySelectorAll()[0].events.animationend();
+  ok(pending.size===0,'animationend 清除保险定时器');
+  const prior=observer;
+  Render.renderInto(root,{profile:{name:'测试',contacts:[]},sections:[]},{animate:false});
+  ok(prior.disconnected && pending.size===0,'重绘清理旧观察器和定时器');
 }
 
 console.log('\n══════ 标签页标题派生 ══════');

@@ -2150,3 +2150,6 @@ html[data-theme="dark"] .toast { background: rgba(245, 245, 247, 0.95); color: #
   html[data-background="petals"] #resume-root .name { animation:petal-type-sway 11s ease-in-out infinite; }
   html[data-background="petals"] #resume-root .intent { animation:petal-type-sway 14s ease-in-out -4s infinite; }
 }
+
+.recovery-notice { position:relative;z-index:2;margin:12px auto;padding:14px 18px;max-width:960px;background:var(--surface);color:var(--text);border:1px solid var(--primary);border-radius:12px;line-height:1.7; }
+@media print { .recovery-notice { display:none !important; } }

@@ -1,6 +1,6 @@
 /* 数据层测试：node tests/store.test.js
    覆盖三件事：
-     1. 版本戳自愈 —— 改了 data.js 之后，浏览器里的旧覆盖必须自动作废
+     1. 版本戳自愈 —— 改了 data.js 之后，浏览器里的旧覆盖先备份再迁移
      2. 背景特效偏好的读写与夹取
      3. 区块（模块）管理 —— 批量更新 / 删除 / 上下移
    ========================================================================== */
@@ -79,7 +79,7 @@ console.log('\n-- 版本戳自愈 --');
   ok(back.profile.headline === '我手动改过的身份行', '2.3 覆盖应生效', back.profile.headline);
 }
 
-/* 3. 关键场景：data.js 升版后，旧覆盖必须被丢弃 */
+/* 3. 关键场景：data.js 升版后，旧覆盖必须备份迁移 */
 {
   const env1 = makeEnv(DATA_V1);
   const d1 = env1.Store.load();
@@ -92,12 +92,12 @@ console.log('\n-- 版本戳自愈 --');
   env2.localStorage.setItem(env2.Store.LS_DATA, carried);
 
   const loaded = env2.Store.load();
-  ok(loaded.meta.title === 'v2', '3.1 升版后应改用新的默认数据', loaded.meta.title);
-  ok(loaded.profile.headline.indexOf('旧版数据') === -1, '3.2 旧覆盖内容不应残留', loaded.profile.headline);
-  ok(loaded.profile.headline === DATA_V2.profile.headline, '3.3 应拿到 v2 的值', loaded.profile.headline);
-  ok(!!env2.Store.lastDiscard, '3.4 应记录丢弃原因供 UI 提示', String(env2.Store.lastDiscard));
-  ok(env2.localStorage.getItem(env2.Store.LS_DATA) === null, '3.5 过期数据应从 localStorage 清掉');
-  ok(!env2.Store.hasOverride(), '3.6 丢弃后 hasOverride 应为 false');
+  ok(loaded.meta.title === '旧标题', '3.1 升版后保留自定义标题', loaded.meta.title);
+  ok(loaded.profile.headline.indexOf('旧版数据') !== -1, '3.2 用户旧内容应保留', loaded.profile.headline);
+  ok(loaded.profile.headline === '这是旧版数据留下的内容', '3.3 迁移保留用户值', loaded.profile.headline);
+  ok(!!env2.Store.dataNotice, '3.4 应记录迁移结果供 UI 提示', String(env2.Store.dataNotice));
+  ok(env2.localStorage.getItem(env2.Store.LS_DATA) !== null, '3.5 迁移后的本地快照应保留');
+  ok(env2.Store.hasOverride(), '3.6 迁移后 hasOverride 应为 true');
 }
 
 /* 4. 同版本内的覆盖不受影响（用户正常编辑不会莫名丢失） */
@@ -120,8 +120,8 @@ console.log('\n-- 版本戳自愈 --');
     profile: { headline: '没有版本号的老数据' }, meta: { title: '老标题' }
   }));
   const d = env.Store.load();
-  ok(d.meta.title === 'v1', '5.1 无版本号的老覆盖应被丢弃', d.meta.title);
-  ok(d.profile.headline !== '没有版本号的老数据', '5.2 老覆盖内容不应生效', d.profile.headline);
+  ok(d.meta.title === '老标题', '5.1 无版本号的旧数据迁移保留', d.meta.title);
+  ok(d.profile.headline === '没有版本号的老数据', '5.2 无版本号的内容也应保留', d.profile.headline);
 }
 
 /* 6. 损坏的 JSON 不应让页面崩掉 */

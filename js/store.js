@@ -1,7 +1,7 @@
 /* =============================================================================
  *  store.js —— 数据层
  * -----------------------------------------------------------------------------
- *  优先级：localStorage 覆盖  >  data.js 默认值
+ *  优先级：本地完整快照 > data.js 默认值；旧格式先备份再迁移
  *  职责：读写数据、导入导出 JSON、应用解析结果的「变更补丁」并保留撤销快照
  * ========================================================================== */
 (function (global) {
@@ -11,6 +11,11 @@
   var LS_THEME = 'resume.theme';
   var LS_LLM = 'resume.llm.v1';
   var LS_BG = 'resume.bg.v1';
+  var LS_RECOVERY = 'resume.recovery.v1';
+  var SS_HISTORY = 'resume.undo.v1';
+  var history = null;
+  var HISTORY_LIMIT = 10;
+  function safeKey(key) { return key !== '__proto__' && key !== 'constructor' && key !== 'prototype'; }
 
   function isPlainObject(v) {
     return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -18,17 +23,85 @@
 
   /* 只对「对象」做深合并；数组整体替换（区块、项目这类列表以新数据为准） */
   function deepMerge(base, patch) {
-    if (!isPlainObject(patch)) return patch === undefined ? base : patch;
-    var out = isPlainObject(base) ? Object.assign({}, base) : {};
-    Object.keys(patch).forEach(function (k) {
-      var pv = patch[k];
-      out[k] = isPlainObject(pv) ? deepMerge(out[k], pv) : pv;
+    if (!isPlainObject(patch)) return deepClone(patch === undefined ? base : patch);
+    var out = {};
+    Object.keys(isPlainObject(base) ? base : {}).filter(safeKey).forEach(function (key) { out[key] = deepClone(base[key]); });
+    Object.keys(patch).filter(safeKey).forEach(function (key) {
+      out[key] = isPlainObject(patch[key]) ? deepMerge(out[key], patch[key]) : deepClone(patch[key]);
     });
     return out;
   }
 
-  function deepClone(v) {
-    return v === undefined ? undefined : JSON.parse(JSON.stringify(v));
+  function deepClone(value) {
+    return value === undefined ? undefined : JSON.parse(JSON.stringify(value), function (key, item) { return safeKey(key) ? item : undefined; });
+  }
+
+  function validateData(input) {
+    if (!isPlainObject(input)) throw new Error('JSON 顶层必须是对象');
+    var data = deepClone(input);
+    if (!('profile' in data) && !('sections' in data)) throw new Error('缺少 profile / sections');
+    function object(value, label) { if (!isPlainObject(value)) throw new Error(label + ' 必须是对象'); }
+    function array(value, label) { if (!Array.isArray(value)) throw new Error(label + ' 必须是数组'); }
+    function strings(value, keys) { keys.forEach(function (key) { if (value[key] !== undefined && typeof value[key] !== 'string') throw new Error(key + ' 必须是字符串'); }); }
+    if (data.meta !== undefined) { object(data.meta, 'meta'); strings(data.meta,['title','footer','footnote']); }
+    if (data.profile === undefined) data.profile = { contacts:[] };
+    object(data.profile, 'profile');
+    strings(data.profile, ['name','headline','intent','avatar']);
+    if (data.profile.contacts === undefined) data.profile.contacts = [];
+    array(data.profile.contacts, 'contacts');
+    data.profile.contacts.forEach(function (c) { object(c,'联系方式'); strings(c,['label','value','href','icon']); });
+    if (data.scores != null) {
+      object(data.scores,'scores'); strings(data.scores,['title']);
+      if (data.scores.total !== undefined) { object(data.scores.total,'总分'); strings(data.scores.total,['label']); if (data.scores.total.value != null && !/^(string|number)$/.test(typeof data.scores.total.value)) throw new Error('分数类型不正确'); }
+      if (data.scores.items === undefined) data.scores.items = [];
+      array(data.scores.items,'成绩项'); data.scores.items.forEach(function (x) { object(x,'成绩'); strings(x,['label']); if (x.value != null && !/^(string|number)$/.test(typeof x.value)) throw new Error('分数类型不正确'); });
+    }
+    if (data.sections === undefined) data.sections = [];
+    array(data.sections,'sections');
+    var usedIds = Object.create(null), usedAnchors = Object.create(null);
+    data.sections.forEach(function (section,index) {
+      object(section,'区块'); strings(section,['id','anchor','kind','title','sort']);
+      var rawId = section.id || 'section-' + index;
+      var id = rawId.toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'') || 'section';
+      if (!/^[a-z]/.test(id) || /^(hero|page-footer|resume-root|parser-drawer|parser-overlay|scores-anchor|avatar-anchor)$/.test(id)) id = 'sec-' + id;
+      var unique = id, suffix = 2;
+      while (usedIds[unique]) unique = id + '-' + suffix++;
+      usedIds[unique] = true;
+      section.id = unique;
+      if (section.anchor && (!/^[a-z][a-z0-9-]*$/.test(section.anchor) || /^(hero|page-footer|resume-root|parser-drawer|parser-overlay|scores-anchor|avatar-anchor)$/.test(section.anchor))) section.anchor = unique;
+      if (unique !== rawId) section.anchor = unique;
+      var anchor = section.anchor || unique, safeAnchor = anchor, anchorSuffix = 2;
+      while (usedAnchors[safeAnchor]) safeAnchor = anchor + '-' + anchorSuffix++;
+      usedAnchors[safeAnchor] = true;
+      section.anchor = safeAnchor;
+      if (section.hidden !== undefined && typeof section.hidden !== 'boolean') throw new Error('hidden 必须是布尔值');
+      if (['list','cards','timeline','tags'].indexOf(section.sort) === -1) section.sort = 'list';
+      var key = section.sort === 'tags' ? 'groups' : 'items';
+      if (section[key] === undefined) section[key] = [];
+      array(section[key],key);
+      section[key].forEach(function (item) {
+        object(item,'条目'); strings(item,['org','date','degree','location','logo','title','text']);
+        if (section.sort === 'tags') {
+          array(item.items,'技能'); item.items.forEach(function (tag) { object(tag,'技能'); strings(tag,['text','level']); });
+        }
+        if (item.bullets !== undefined) { array(item.bullets,'bullets'); if (item.bullets.some(function (v) { return typeof v !== 'string'; })) throw new Error('要点必须是字符串'); }
+        if (item.blocks !== undefined) { array(item.blocks,'blocks'); item.blocks.forEach(function (block) { object(block,'内容块'); strings(block,['label','text']); }); }
+      });
+    });
+    return data;
+  }
+
+  function readHistory() {
+    if (history !== null) return history;
+    try { history = JSON.parse(global.sessionStorage.getItem(SS_HISTORY) || '[]'); if (!Array.isArray(history)) history = []; }
+    catch (_) { history = []; }
+    history = history.slice(-HISTORY_LIMIT);
+    return history;
+  }
+  function writeHistory(value) {
+    history = deepClone(value).slice(-HISTORY_LIMIT);
+    try { global.sessionStorage.setItem(SS_HISTORY, JSON.stringify(history)); Store.historyNotice = ''; }
+    catch (_) { Store.historyNotice = '当前环境无法持久保存撤销历史，历史仅在本页有效'; }
   }
 
   function defaults() {
@@ -45,6 +118,7 @@
   /* 把 "a.b.c" 路径写进对象，自动创建中间层级 */
   function setByPath(target, path, value) {
     var parts = String(path).split('.');
+    if (!parts.every(safeKey)) return target;
     var node = target;
     for (var i = 0; i < parts.length - 1; i++) {
       var key = parts[i];
@@ -56,6 +130,7 @@
   }
 
   function getByPath(target, path) {
+    if (!String(path).split('.').every(safeKey)) return undefined;
     return String(path).split('.').reduce(function (node, key) {
       return node == null ? undefined : node[key];
     }, target);
@@ -67,76 +142,93 @@
     LS_LLM: LS_LLM,
     LS_BG: LS_BG,
     deepMerge: deepMerge,
+    validateData: validateData,
+    HISTORY_LIMIT: HISTORY_LIMIT,
     deepClone: deepClone,
     setByPath: setByPath,
     getByPath: getByPath,
 
     defaults: defaults,
 
-    /** 是否已存在本地改动（会顺带判断版本是否仍然有效） */
+    /** 所有有效的旧格式都是待迁移数据，而不是应丢弃的覆盖。 */
     hasOverride: function () {
-      var raw = null;
-      try { raw = localStorage.getItem(LS_DATA); } catch (e) { return false; }
-      if (!raw) return false;
-      try {
-        var saved = JSON.parse(raw);
-        return typeof (saved && saved.__v) === 'number' && saved.__v === currentVersion();
-      } catch (e) {
-        return false;
-      }
+      try { return !!localStorage.getItem(LS_DATA); } catch (_) { return false; }
     },
 
-    /**
-     * 读取当前生效数据（默认值 + 本地覆盖）
-     * 覆盖里存了写入时的 dataVersion；若与当前默认数据版本不一致，说明 data.js 被改过，
-     * 旧覆盖直接丢弃并清出 localStorage，避免「改了 data.js 却看不到变化」。
-     */
+    recoveryRaw: null,
+    recoveryPending: false,
+    dataNotice: '',
+    exportRecovery: function () {
+      if (this.recoveryRaw) return this.recoveryRaw;
+      try { var backups = JSON.parse(localStorage.getItem(LS_RECOVERY) || '[]'); return backups.length ? backups[backups.length - 1].raw : ''; } catch (_) { return ''; }
+    },
+    backup: function (raw, version) {
+      this.recoveryRaw = raw;
+      try {
+        var backups = JSON.parse(localStorage.getItem(LS_RECOVERY) || '[]');
+        if (!Array.isArray(backups)) backups = [];
+        backups.push({version:version == null ? 'legacy' : version, at:Date.now(), raw:raw});
+        localStorage.setItem(LS_RECOVERY, JSON.stringify(backups.slice(-5)));
+        return true;
+      } catch (_) { return false; }
+    },
+    migrate: function (saved) {
+      // Old records were patches; merge once. New records are complete snapshots.
+      var data = saved.__snapshot === 1 ? deepClone(saved) : deepMerge(defaults(), saved);
+      delete data.__v; delete data.__snapshot;
+      return validateData(data);
+    },
     load: function () {
-      var base = defaults();
-      var raw = null;
-      try { raw = localStorage.getItem(LS_DATA); } catch (e) { return base; }
-      if (!raw) return base;
-
+      var raw;
+      try { raw = localStorage.getItem(LS_DATA); } catch (_) { return defaults(); }
+      if (!raw) return defaults();
       var saved;
-      try {
-        saved = JSON.parse(raw);
-      } catch (e) {
-        console.warn('[store] 本地数据损坏，已回退到默认数据：', e);
-        this._discardStale('本地数据无法解析');
-        return base;
+      try { saved = JSON.parse(raw); if (!isPlainObject(saved)) throw new Error('格式错误'); }
+      catch (_) {
+        this.recoveryRaw = raw; this.recoveryPending = true;
+        this.dataNotice = '本地数据无法解析，原始数据仍保留；请导出旧数据后检查，或恢复默认数据';
+        return defaults();
       }
-
-      var ver = saved && saved.__v;
-      var expect = currentVersion();
-      /* 老版本存的覆盖没有 __v 字段 → 视为过期；有版本号但不一致 → 也过期 */
-      if (typeof ver !== 'number' || ver !== expect) {
-        this._discardStale('默认数据已更新到 v' + expect + '，本地覆盖是 ' +
-          (typeof ver === 'number' ? 'v' + ver : '旧版本格式'));
-        return base;
+      var version = saved.__v;
+      var needsMigration = saved.__snapshot !== 1 || version !== currentVersion();
+      var data;
+      try { data = this.migrate(saved); }
+      catch (_) {
+        this.recoveryRaw = raw; this.recoveryPending = true;
+        this.dataNotice = '本地数据结构不兼容，原始数据仍保留，可导出旧数据进行修复';
+        return defaults();
       }
-
-      delete saved.__v;
-      return deepMerge(base, saved);
-    },
-
-    /** 丢弃过期的本地覆盖，并记下提示文案供 UI 展示 */
-    _discardStale: function (why) {
-      try { localStorage.removeItem(LS_DATA); } catch (e) { /* 忽略 */ }
-      this.lastDiscard = why || '本地覆盖已过期';
-      console.warn('[store] 已丢弃过期的本地数据：' + this.lastDiscard);
+      if (needsMigration) {
+        if (typeof version === 'number' && version > currentVersion()) {
+          this.recoveryRaw = raw;
+          this.dataNotice = '本地数据来自更新版本，当前只读取，不自动降级；可导出旧数据备份';
+        } else if (this.backup(raw,version)) {
+          try { this.save(data); this.dataNotice = '已迁移本地修改到当前版本，旧数据已备份，可导出旧数据'; }
+          catch (_) { this.dataNotice = '迁移结果可读取，但写入失败；原始数据与备份均保留，请导出备份后释放空间'; }
+        } else {
+          this.recoveryPending = true;
+          this.dataNotice = '备份空间不足，未改写原始数据；请先导出旧数据再释放空间';
+        }
+      }
+      return data;
     },
 
     /** 整体写入（同时刷新缓存与版本戳） */
     save: function (data) {
-      var copy = deepClone(data);
+      var copy = validateData(data);
+      if (this.recoveryPending) {
+        if (!this.backup(this.recoveryRaw, 'recovery')) throw new Error('旧数据尚未备份，请先导出旧数据并释放存储空间');
+        this.recoveryPending = false;
+      }
       if (copy.meta) copy.meta.dataVersion = currentVersion();
       copy.__v = currentVersion();
+      copy.__snapshot = 1;
       try {
         localStorage.setItem(LS_DATA, JSON.stringify(copy));
       } catch (e) {
         throw new Error('本地存储写入失败（可能是隐私模式或空间不足）：' + e.message);
       }
-      delete copy.__v;
+      delete copy.__v; delete copy.__snapshot;
       return copy;
     },
 
@@ -158,7 +250,11 @@
 
     /** 恢复 data.js 默认数据（清掉本地覆盖） */
     reset: function () {
-      try { localStorage.removeItem(LS_DATA); } catch (e) { /* 忽略 */ }
+      var raw = null;
+      try { raw = localStorage.getItem(LS_DATA); } catch (_) {}
+      if (raw && !this.backup(raw, 'reset')) throw new Error('无法备份现有数据，请先导出再恢复默认数据');
+      try { localStorage.removeItem(LS_DATA); } catch (e) { throw new Error('无法恢复默认数据：' + e.message); }
+      this.dataNotice = ''; this.recoveryPending = false;
       return defaults();
     },
 
@@ -174,16 +270,10 @@
       } catch (e) {
         throw new Error('不是合法的 JSON：' + e.message);
       }
-      if (!isPlainObject(parsed)) throw new Error('JSON 顶层必须是一个对象');
-      if (!parsed.profile && !parsed.sections) {
-        throw new Error('缺少 profile / sections 字段，可能不是本简历导出的文件');
-      }
-      return parsed;
+      return validateData(parsed);
     },
 
-    importData: function (obj) {
-      return this.save(deepMerge(defaults(), obj));
-    },
+    importData: function (obj) { return this.save(validateData(obj)); },
 
     /* -------------------------------------------------- 区块（模块）管理 */
 
@@ -196,6 +286,7 @@
     update: function (patch) {
       var next = deepClone(this.load());
       Object.keys(patch || {}).forEach(function (key) {
+        if (!key.split('.').every(safeKey)) return;
         if (key.indexOf('.') === -1) next[key] = deepClone(patch[key]);
         else setByPath(next, key, deepClone(patch[key]));
       });
@@ -231,21 +322,16 @@
     },
 
     /* ------------------------------------------------------------ 撤销 */
-    _undo: null,
-
-    pushUndo: function (snapshot) {
-      this._undo = deepClone(snapshot);
-    },
-
-    canUndo: function () {
-      return !!this._undo;
-    },
-
+    getUndoState: function () { return deepClone(readHistory()); },
+    restoreUndoState: function (state) { writeHistory(state); },
+    pushUndo: function (snapshot) { var next = readHistory().slice(); next.push(validateData(snapshot)); writeHistory(next); },
+    canUndo: function () { return readHistory().length > 0; },
     undo: function () {
-      if (!this._undo) return null;
-      var snap = this._undo;
-      this._undo = null;
-      return this.save(snap);
+      var stack = readHistory();
+      if (!stack.length) return null;
+      var restored = this.save(validateData(stack[stack.length - 1]));
+      writeHistory(stack.slice(0,-1));
+      return restored;
     },
 
     /* ------------------------------------------------------------ 主题 */
@@ -297,7 +383,8 @@
         apiKey: '',
         baseUrl: 'https://api.deepseek.com',
         model: 'deepseek-chat',
-        trigger: 'fallback'
+        trigger: 'fallback',
+        redactContacts: true
       };
     },
 
@@ -326,10 +413,12 @@
 
     /** 清空本工具写入的全部本地数据 */
     wipeLocal: function () {
-      [LS_DATA, LS_LLM, LS_BG].forEach(function (k) {
+      [LS_DATA, LS_LLM, LS_BG, LS_THEME, LS_RECOVERY].forEach(function (k) {
         try { localStorage.removeItem(k); } catch (e) { /* 忽略 */ }
       });
-      this._undo = null;
+      history = [];
+      try { global.sessionStorage.removeItem(SS_HISTORY); } catch (_) {}
+      this.recoveryRaw = null; this.dataNotice = '';
     }
   };
 
