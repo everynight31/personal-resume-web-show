@@ -91,6 +91,14 @@
 
   var EFFECTS = {
 
+    clouds: {
+      meta:{id:'clouds',name:'云海晨雾',desc:'晨光、远山和三层云絮缓慢流动，鼠标拨雾，滚动产生远近视差'},
+      init:function(w,h,rnd){
+        if(!global.ResumeClouds)return EFFECTS.waves.init(w,h,rnd);
+        return global.ResumeClouds.create(ctx,w,h,density,document.documentElement.getAttribute('data-theme')==='dark',rnd);
+      }
+    },
+
     ink: {
       meta: { id:'ink',name:'水墨晕染',desc:'宣纸与淡墨缓慢洇开，点击落墨、滑动留下柔和墨痕，文字同步切换墨青配色' },
       init:function(w,h,rnd){
@@ -498,7 +506,7 @@
   };
 
   /* 元数据列表，顺序即设置页里的显示顺序 */
-  var EFFECT_LIST = ['water', 'starlight', 'ink', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
+  var EFFECT_LIST = ['water', 'starlight', 'ink', 'clouds', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
     return EFFECTS[id].meta;
   });
 
@@ -527,7 +535,7 @@
     rafId = null;
     if (paused || printing || reduceMotion || currentId === 'off' || !current) return;
     rafId = global.requestAnimationFrame(loop);
-    if ((currentId === 'water' || currentId === 'starlight' || currentId === 'ink') && lastTs && ts - lastTs < 32) return;
+    if ((currentId === 'water' || currentId === 'starlight' || currentId === 'ink' || currentId === 'clouds') && lastTs && ts - lastTs < 32) return;
     var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 1 / 60;  /* 夹住，避免切回标签页时跳帧 */
     lastTs = ts;
     if (!reduceMotion) current.frame(dt, W, H);
