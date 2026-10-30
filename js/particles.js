@@ -420,6 +420,7 @@
   }
 
   function build() {
+    document.documentElement.setAttribute('data-background', currentId);
     var eff = EFFECTS[currentId] || EFFECTS.water;
     var rnd = makeRnd((Math.round(W) * 73856093) ^ (Math.round(H) * 19349663));
     current = eff.init(W, H, rnd);
