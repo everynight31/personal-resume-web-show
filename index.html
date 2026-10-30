@@ -30,8 +30,9 @@
 <!-- 粒子背景（自绘 Canvas，零外部依赖） -->
 <canvas id="particle-canvas" aria-hidden="true"></canvas>
 
+<a class="skip-link" href="#resume-root">跳到简历内容</a>
 <div class="container">
-  <main id="resume-root">
+  <main id="resume-root" tabindex="-1">
     <!-- 全部内容由 render.js 依据 data.js / localStorage 渲染 -->
   </main>
 
@@ -48,7 +49,7 @@
     <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13.4A8.2 8.2 0 1 1 10.6 4a6.6 6.6 0 0 0 9.4 9.4z"/></svg>
   </button>
 
-  <button type="button" id="parser-fab" class="fab" aria-haspopup="dialog" aria-expanded="false">
+  <button type="button" id="parser-fab" class="fab" aria-label="编辑简历：粘贴识别与设置" aria-controls="parser-drawer" aria-haspopup="dialog" aria-expanded="false">
     <svg viewBox="0 0 24 24" aria-hidden="true" class="fab-icon">
       <path d="M9 3h6v3h3.5A1.5 1.5 0 0 1 20 7.5v13A1.5 1.5 0 0 1 18.5 22h-13A1.5 1.5 0 0 1 4 20.5v-13A1.5 1.5 0 0 1 5.5 6H9z"/>
       <path d="M9 3v3h6V3"/>
@@ -66,8 +67,8 @@
     <h2 id="drawer-title">粘贴识别</h2>
     <div class="drawer-head-actions">
       <div class="seg" role="tablist" aria-label="工作模式">
-        <button type="button" class="seg-btn is-active" data-tab="review" role="tab" aria-selected="true">识别校对</button>
-        <button type="button" class="seg-btn" data-tab="settings" role="tab" aria-selected="false">设置</button>
+        <button type="button" id="tab-review" class="seg-btn is-active" data-tab="review" role="tab" aria-controls="panel-review" aria-selected="true">识别校对</button>
+        <button type="button" id="tab-settings" class="seg-btn" data-tab="settings" role="tab" aria-controls="panel-settings" aria-selected="false" tabindex="-1">设置</button>
       </div>
       <button type="button" id="drawer-close" class="icon-btn" title="关闭（Esc）" aria-label="关闭">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -76,7 +77,7 @@
   </header>
 
   <!-- ------------------------------ 识别校对页 ------------------------------ -->
-  <div class="drawer-body" data-panel="review">
+  <div id="panel-review" class="drawer-body" data-panel="review" role="tabpanel" aria-labelledby="tab-review">
     <div class="pane pane-input">
       <div class="pane-head">
         <h3>① 粘贴简历文本</h3>
@@ -92,11 +93,11 @@
         靠日期、电话、邮箱等线索自动分段（准确率会降一些，右侧可逐项修正）。
       </p>
 
-      <textarea id="raw-input" spellcheck="false"
+      <textarea id="raw-input" aria-label="简历原始文本" spellcheck="false"
         placeholder="把简历文本整段粘贴到这里……"></textarea>
 
       <div class="pane-foot">
-        <div class="parse-status" id="parse-status" data-state="idle">等待输入</div>
+        <div class="parse-status" id="parse-status" data-state="idle" role="status">等待输入</div>
         <div class="btn-row">
           <button type="button" id="btn-sample" class="btn ghost">填入示例</button>
           <button type="button" id="btn-parse" class="btn primary">
@@ -126,7 +127,7 @@
       </div>
 
       <div class="pane-foot">
-        <div class="apply-status" id="apply-status"></div>
+        <div class="apply-status" id="apply-status" role="status"></div>
         <div class="btn-row">
           <button type="button" id="btn-undo" class="btn ghost" disabled>撤销上次应用</button>
           <button type="button" id="btn-discard" class="btn ghost">清空结果</button>
@@ -147,7 +148,7 @@
   </div>
 
   <!-- -------------------------------- 设置页 -------------------------------- -->
-  <div class="drawer-body" data-panel="settings" hidden>
+  <div id="panel-settings" class="drawer-body" data-panel="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
     <section class="setting-group">
       <h3>大模型增强识别</h3>
       <p class="hint">
