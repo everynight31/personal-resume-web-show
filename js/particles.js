@@ -28,9 +28,10 @@
   var colors = { line: 'rgba(0,113,227,.22)', dot: 'rgba(0,113,227,.55)' };
   var mouse = { x: -9999, y: -9999, active: false };
   var current = null;          /* 当前特效实例 */
-  var currentId = 'network';
+  var currentId = 'water';
   var density = 1;
   var paused = false;
+  var printing = false;
   var rafId = null;
 
   /* ------------------------------------------------------------ 工具函数 */
@@ -89,6 +90,15 @@
   /* ================================================================ 特效库 */
 
   var EFFECTS = {
+
+    water: {
+      meta: { id: 'water', name: '流动水面', desc: '水光缓慢流动，鼠标划过或手指滑动泛起涟漪，滚动带来轻微视差' },
+      init: function (w, h, rnd) {
+        if (!global.ResumeWater) return EFFECTS.waves.init(w, h, rnd);
+        return global.ResumeWater.create(ctx, w, h, density,
+          document.documentElement.getAttribute('data-theme') === 'dark');
+      }
+    },
 
     /* ---------------------------------------------- 1. 粒子连线（默认款） */
     network: {
@@ -394,7 +404,7 @@
   };
 
   /* 元数据列表，顺序即设置页里的显示顺序 */
-  var EFFECT_LIST = ['network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
+  var EFFECT_LIST = ['water', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
     return EFFECTS[id].meta;
   });
 
@@ -410,23 +420,34 @@
   }
 
   function build() {
-    var eff = EFFECTS[currentId] || EFFECTS.network;
+    var eff = EFFECTS[currentId] || EFFECTS.water;
     var rnd = makeRnd((Math.round(W) * 73856093) ^ (Math.round(H) * 19349663));
     current = eff.init(W, H, rnd);
-    if (reduceMotion && current) current.frame(1 / 60, W, H);   /* 静态画一帧 */
+    if (current.scroll) current.scroll(global.scrollY || 0);
+    current.frame(0, W, H);   /* 立即绘制；减少动态效果时保留这一帧 */
   }
 
   var lastTs = 0;
   function loop(ts) {
+    rafId = null;
+    if (paused || printing || reduceMotion || currentId === 'off' || !current) return;
     rafId = global.requestAnimationFrame(loop);
-    if (paused || !current) { lastTs = ts; return; }
+    if (currentId === 'water' && lastTs && ts - lastTs < 32) return;
     var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 1 / 60;  /* 夹住，避免切回标签页时跳帧 */
     lastTs = ts;
     if (!reduceMotion) current.frame(dt, W, H);
   }
 
   function start() {
-    if (!rafId) rafId = global.requestAnimationFrame(loop);
+    if (!rafId && !paused && !printing && !reduceMotion && currentId !== 'off') {
+      lastTs = 0;
+      rafId = global.requestAnimationFrame(loop);
+    }
+  }
+
+  function stop() {
+    if (rafId) global.cancelAnimationFrame(rafId);
+    rafId = null;
   }
 
   function setEffect(id) {
@@ -434,6 +455,7 @@
     currentId = id;
     canvas.style.display = (id === 'off') ? 'none' : '';
     build();
+    if (id === 'off') stop(); else start();
     return true;
   }
 
@@ -450,10 +472,24 @@
     resizeTimer = setTimeout(resize, 160);
   }, { passive: true });
 
-  global.addEventListener('pointermove', function (e) {
+  function interact(e, force) {
+    if (reduceMotion || paused || printing) return;
+    if (e.target && e.target.closest && e.target.closest('.drawer, .fab-wrap, button, input, textarea, select, a')) return;
     mouse.x = e.clientX;
     mouse.y = e.clientY;
     mouse.active = true;
+    if (current && current.disturb) current.disturb(e.clientX, e.clientY, force);
+  }
+  global.addEventListener('pointermove', function (e) { interact(e, false); }, { passive: true });
+  global.addEventListener('pointerdown', function (e) { interact(e, true); }, { passive: true });
+  global.addEventListener('touchmove', function (e) {
+    if (e.touches && e.touches[0]) {
+      var touch = e.touches[0];
+      interact({ clientX: touch.clientX, clientY: touch.clientY, target: e.target }, false);
+    }
+  }, { passive: true });
+  global.addEventListener('scroll', function () {
+    if (!reduceMotion && current && current.scroll) current.scroll(global.scrollY || 0);
   }, { passive: true });
 
   global.addEventListener('pointerleave', function () { mouse.active = false; }, { passive: true });
@@ -461,8 +497,18 @@
   /* 标签页不可见时停掉绘制，省电 */
   document.addEventListener('visibilitychange', function () {
     paused = document.hidden;
-    if (!paused && current) current.frame(1 / 60, W, H);
+    if (paused) stop(); else start();
   });
+
+  if (global.matchMedia) {
+    var motionQuery = global.matchMedia('(prefers-reduced-motion: reduce)');
+    var motionChanged = function (e) {
+      reduceMotion = e.matches;
+      if (reduceMotion) { stop(); build(); } else start();
+    };
+    if (motionQuery.addEventListener) motionQuery.addEventListener('change', motionChanged);
+    else if (motionQuery.addListener) motionQuery.addListener(motionChanged);
+  }
 
   /* 主题切换后重新取色并重建（部分特效的颜色在 init 时就固化了） */
   if (global.MutationObserver) {
@@ -474,13 +520,16 @@
 
   /* 打印时隐藏背景，别把粒子印进 PDF */
   global.addEventListener('beforeprint', function () {
-    paused = true;
+    printing = true;
+    stop();
     canvas.style.display = 'none';
   });
   global.addEventListener('afterprint', function () {
     paused = document.hidden;
+    printing = false;
     canvas.style.display = (currentId === 'off') ? 'none' : '';
     resize();
+    start();
   });
 
   /* ================================================================ 启动 */
@@ -496,6 +545,6 @@
     setDensity: setDensity,
     getDensity: function () { return density; },
     redraw: function () { colors = themeColors(); resize(); },
-    stop: function () { if (rafId) global.cancelAnimationFrame(rafId); rafId = null; }
+    stop: stop
   };
 })(typeof window !== 'undefined' ? window : globalThis);
