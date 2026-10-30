@@ -107,4 +107,37 @@ arcs = 0; water.frame(5);
 check(arcs === 0, '波纹会消退，不会无限堆积');
 water.disturb(NaN,Infinity,true); water.frame(.1);
 check(arcs === 0, '忽略无效输入坐标');
+/* 水墨缓存、毛边扩散、交互上限和消退。 */
+{
+  let created = 0;
+  const paint = { fillRect(){}, beginPath(){}, moveTo(){}, lineTo(){}, closePath(){}, fill(){}, stroke(){} };
+  const draws = [];
+  const inkCtx = { createPattern:()=>({}), fillRect(){}, drawImage(...args){draws.push(args);} };
+  const inkEnv = { Math, isFinite, document:{ createElement(){ created++; return {getContext:()=>paint}; } } };
+  inkEnv.window=inkEnv;
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT,'js/ink.js'),'utf8'),inkEnv);
+  let seed=12;
+  const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+  const ink=inkEnv.ResumeInk.create(inkCtx,800,600,1,false,random);
+  ink.frame(0);
+  check(draws.length===4 && created===4, '水墨缓存一张宣纸和三种毛边墨迹，初始画面可见');
+  draws.length=0;
+  ink.disturb(300,200,true);ink.frame(.1);
+  const small=draws[4][3];
+  draws.length=0;ink.frame(1);
+  check(draws[4][3]>small, '点击墨滴随时间扩散');
+  for(let i=0;i<60;i++)ink.disturb(200+i,250,true);
+  draws.length=0;ink.frame(.1);
+  check(draws.length===18, '交互墨迹最多14处，防止无限累积');
+  check(inkCtx.globalAlpha===1, '绘制后恢复透明度，不污染其他背景');
+  draws.length=0;ink.frame(13);
+  check(draws.length===4, '过期交互墨迹消退，仅保留环境墨晕');
+  ink.disturb(NaN,Infinity,true);draws.length=0;ink.frame(.1);
+  check(draws.length===4, '水墨忽略无效输入坐标');
+  check(created===4, '每帧不会重新生成纸纹与墨迹缓存');
+  inkEnv.document.createElement=()=>({getContext:()=>null});
+  const plain=inkEnv.ResumeInk.create(inkCtx,390,844,1,true,random);
+  check(typeof plain.frame==='function', '纹理画布不可用时仍提供纯色回退');
+  plain.frame(0);
+}
 console.log('通过 ' + checks + ' 项，失败 0 项');
