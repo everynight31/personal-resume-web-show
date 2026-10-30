@@ -1537,6 +1537,10 @@ html[data-theme="dark"] .field-warn { color: #FF7A72; }
 
 /* 粒子连线：几个点 + 一条斜线 */
 .effect-thumb.t-network i:nth-child(1) { width: 5px; height: 5px; border-radius: 50%; left: 7px; top: 9px; opacity: 0.85; }
+.effect-thumb.t-water { background: linear-gradient(135deg, #d7f5fc, #5baec8); }
+.effect-thumb.t-water i { background: none; border: 1px solid rgba(255,255,255,.8); border-radius: 50%; width: 34px; height: 20px; left: 5px; top: 11px; transform: rotate(-25deg); }
+.effect-thumb.t-water i:nth-child(2) { width: 22px; height: 12px; left: 11px; top: 15px; }
+.effect-thumb.t-water i:nth-child(n+3) { display: none; }
 .effect-thumb.t-network i:nth-child(2) { width: 4px; height: 4px; border-radius: 50%; right: 8px; top: 22px; opacity: 0.6; }
 .effect-thumb.t-network i:nth-child(3) { width: 3px; height: 3px; border-radius: 50%; left: 16px; bottom: 8px; opacity: 0.5; }
 .effect-thumb.t-network i:nth-child(4) { width: 30px; height: 1px; left: 8px; top: 17px; transform: rotate(-28deg); opacity: 0.35; }
