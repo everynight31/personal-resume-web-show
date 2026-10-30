@@ -48,7 +48,11 @@
 
 ### 背景效果
 
-右下角「粘贴识别」→「设置」→「背景效果」里可以换，共 6 种：粒子连线（默认）、气泡上浮、星空闪烁、声波流动、流星拖尾、关闭。全部自绘 Canvas，不联网、不加载任何库；选择会记在浏览器里，刷新后保持。
+右下角「粘贴识别」→「设置」→「背景效果」里可以换，共 7 种：流动水面（默认）、粒子连线、气泡上浮、星空闪烁、声波流动、流星拖尾、关闭。全部本地绘制，不联网、不加载任何库；选择会记在浏览器里，刷新后保持。
+
+流动水面带缓慢流动的折射光纹：鼠标划过、点击或手指滑动会激起涟漪，页面滚动带来轻微视差；「效果强度 / 粒子密度」可调整水光强度。已保存的背景选择会保留，旧用户可在设置里选「流动水面」或点「恢复默认背景」。
+
+水面使用 WebGL 加速、限制绘制分辨率并以约 30 帧运行；不支持 WebGL 时回退为 Canvas 流动波纹。隐藏标签页、关闭背景或打印时停止动画调度；系统开启「减少动态效果」时只显示静态水面。
 
 ### 换头像
 
@@ -68,7 +72,7 @@
 
 运行 `node tools/serve.js`，然后访问终端显示的本地地址。项目不需要安装依赖。
 
-回归检查分别运行 `node tests/helpers.test.js`、`node tests/parse.test.js`、`node tests/panel.test.js`、`node tests/render.test.js` 和 `node tests/store.test.js`。
+回归检查分别运行 `node tests/helpers.test.js`、`node tests/parse.test.js`、`node tests/panel.test.js`、`node tests/render.test.js`、`node tests/store.test.js` 和 `node tests/particles.test.js`。
 
 ### 部署到 GitHub Pages
 
