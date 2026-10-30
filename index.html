@@ -6,7 +6,7 @@
 <!-- 这里是打开瞬间的占位标题，页面渲染后会由 render.js 按 data.js 的
      meta.title（或 profile.name）自动改写，所以改简历内容不用动这一行 -->
 <title>简历</title>
-<meta name="description" content="可编辑的交互式网页简历，支持粘贴识别、模块管理、10 个背景选项与配套文字主题、深浅模式和 PDF 打印。">
+<meta name="description" content="可编辑的交互式网页简历，支持粘贴识别、模块管理、11 个背景选项与配套文字主题、深浅模式和 PDF 打印。">
 <meta name="color-scheme" content="light dark">
 
 <!-- 主题需在样式表之前确定，避免深色模式闪白 -->
@@ -27,7 +27,7 @@
 </head>
 
 <body>
-<!-- 动态背景（水面、星光、水墨、云雾等，零外部依赖） -->
+<!-- 动态背景（水面、星光、水墨、云雾、花瓣等，零外部依赖） -->
 <canvas id="particle-canvas" aria-hidden="true"></canvas>
 
 <a class="skip-link" href="#resume-root">跳到简历内容</a>
@@ -279,7 +279,7 @@
       <h3>关于</h3>
       <p class="hint">
         个人简历的展示与编辑工具，支持粘贴识别、逐项校对、模块管理、头像更换与 JSON 备份。
-        提供流动水面、星光漫游、水墨晕染、云海晨雾等 10 个背景选项（含关闭），搭配对应文字主题，支持深浅模式、手机布局和系统「减少动态效果」。
+        提供流动水面、星光漫游、水墨晕染、云海晨雾、风吹花瓣等 11 个背景选项（含关闭），搭配对应文字主题，支持深浅模式、手机布局和系统「减少动态效果」。
       </p>
       <p class="hint">
         双击 <code>index.html</code> 即可运行。默认在本机处理；启用「大模型增强识别」后，会将待识别文本发送到配置的模型接口。
@@ -306,6 +306,7 @@
 <script src="js/water.js" defer></script>
 <script src="js/ink.js" defer></script>
 <script src="js/clouds.js" defer></script>
+<script src="js/petals.js" defer></script>
 <script src="js/particles.js" defer></script>
 <script src="js/ui.js" defer></script>
 </body>
