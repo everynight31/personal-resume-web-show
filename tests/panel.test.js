@@ -765,6 +765,13 @@ const moduleTypingDone = (async function () {
   ok(store.load().sections.length===1 && store.nextUndoLabel()==='更早的操作','16.4 撤销删除后仍保留更早操作');
 }
 
+{
+  const win=makeEnv(),store=win.ResumeStore,ui=win.ResumeUI;
+  const base=store.load();base.sections=[{id:'hidden',title:'保持隐藏',hidden:true,sort:'list',items:[{text:'保留内容'}]}];store.save(base);
+  ui._setReview(null);ui._renderReviewForTest();ui._applyReviewForTest();
+  ok(store.load().sections[0].hidden===true,'17.1 直接应用当前编辑器不会意外显示隐藏模块');
+}
+
 Promise.resolve(panelEditDone)
   .then(function () { return unparsedEditDone; })
   .then(function () { return moduleTypingDone; })

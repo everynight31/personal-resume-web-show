@@ -206,6 +206,7 @@
     mergeSections(Store.load().sections, parsedSections).forEach(function (entry) {
       var sec = entry.section;
       var path = 'section.' + sec.id;
+      if (fromCurrent && sec.hidden) state.checked[path] = false;
       /* 未识别到（且不是「当前数据」模式）→ 值置空 */
       var blank = !entry.fromParse && !fromCurrent;
       var value = blank ? null : (sec.sort === 'tags' ? sec.groups : sec.items);
@@ -217,7 +218,7 @@
       var title = (sec.title || sectionTitleOf(sec.id));
       var tag = entry.fromParse
         ? (sec.src === 'inferred' ? '· 自动分段' : sec.src === 'llm' ? '· 大模型' : '')
-        : '· 现有模块（本次未识别到）';
+        : fromCurrent ? (sec.hidden ? '· 已隐藏' : '· 当前模块') : '· 现有模块（本次未识别到）';
       /* buildField 收到的这个对象，就是用户输入时 setPath 要写回去的对象，
          所以必须跟 applyReview 取值的来源一致：
            · 有识别结果 → 写进识别结果
@@ -278,7 +279,7 @@
     if (isExisting) group.classList.add('is-existing');
     group.dataset.groupPath = groupPath;
     /* 组头勾选框的状态：只要有字段默认不勾，组头就不勾 */
-    var initiallyChecked = !isExisting && !fields.some(function (f) { return f.notFound; });
+    var initiallyChecked = !isExisting && !fields.some(function (f) { return f.notFound || state.checked[f.path] === false; });
 
     var filled = fields.filter(function (f) { return hasValue(f.value); }).length;
     var missing = fields.length - filled;
