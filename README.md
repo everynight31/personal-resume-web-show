@@ -15,6 +15,9 @@
 
 打开 `index.html` 即可。右下角有两个悬浮按钮：主题切换（🌙/☀️，默认跟随系统）和「粘贴识别」。
 
+首页「浏览简历」可直接跳到第一个可见章节；「打印 / 导出 PDF」可打开浏览器打印窗口。
+手机上的编辑面板按「输入 → 校对 → 应用」纵向滚动，所有操作都可以通过键盘访问；打开面板后焦点会进入弹窗，按 `Esc` 关闭并返回入口。
+
 ### 一键识别
 
 1. 点右下角「粘贴识别」（快捷键 `Ctrl/Cmd + K`，也可以直接用 `index.html#parser` 打开）
@@ -58,6 +61,14 @@
 ### 打印 / 导出 PDF
 
 浏览器 `Ctrl+P` → 目标选「另存为 PDF」。会自动隐藏所有工具界面（粒子背景、悬浮按钮、抽屉、导航）并强制浅色 + A4 分页。
+
+也可使用首页「打印 / 导出 PDF」按钮。导出的是当前已应用的简历，校对中的草稿需要先应用。
+
+### 本地验证
+
+运行 `node tools/serve.js`，然后访问终端显示的本地地址。项目不需要安装依赖。
+
+回归检查分别运行 `node tests/helpers.test.js`、`node tests/parse.test.js`、`node tests/panel.test.js`、`node tests/render.test.js` 和 `node tests/store.test.js`。
 
 ### 部署到 GitHub Pages
 
