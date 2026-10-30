@@ -55,6 +55,7 @@
     btnCollapseAll: $('btn-collapse-all'),
     btnApply: $('btn-apply'),
     btnUndo: $('btn-undo'),
+    settingsUndo: $('btn-settings-undo'),
     btnDiscard: $('btn-discard'),
     applyStatus: $('apply-status'),
     miniPreview: $('mini-preview'),
@@ -321,19 +322,21 @@
 
     if (els.btnApply) els.btnApply.addEventListener('click', applyReview);
 
-    if (els.btnUndo) {
-      els.btnUndo.addEventListener('click', function () {
-        var restored;
+    [els.btnUndo,els.settingsUndo].forEach(function (button) {
+      if (!button) return;
+      button.addEventListener('click',function () {
+        var label = Store.nextUndoLabel(), restored;
         try { restored = Store.undo(); }
-        catch (error) { status(els.applyStatus, '撤销失败：' + error.message, 'err'); return; }
+        catch (error) { status(els.applyStatus, '撤销失败：' + error.message, 'err'); status(els.dataStatus,error.message,'err'); return; }
         if (!restored) return;
-        renderMain();
-        els.btnUndo.disabled = !Store.canUndo();
-        status(els.applyStatus, '已撤销上一次应用', 'ok');
-        state.draft = Store.load();
-        renderMini();
+        state.review = null; state.checked = {}; state.edited = {}; state.sectionEdits = {};
+        state.draft = restored;
+        renderMain(); renderReview(); renderModuleManager(); renderAvatarPreview(); renderMini();
+        refreshUndo();
+        status(els.applyStatus,'已撤销：' + label,'ok');status(els.dataStatus,'已撤销：' + label,'ok');
+        toast('已撤销：' + label);
       });
-    }
+    });
 
     if (els.btnDiscard) {
       els.btnDiscard.addEventListener('click', function () {
@@ -358,12 +361,29 @@
 
   /* ================================================================== 启动 */
 
+  function refreshUndo() {
+    if (Store.historyNotice && els.recoveryNotice) {
+      els.recoveryNotice.hidden = false;
+      els.recoveryNotice.textContent = [Store.dataNotice,Store.historyNotice].filter(Boolean).join('；');
+    }
+    [els.btnUndo,els.settingsUndo].forEach(function (button) {
+      if (!button) return;
+      button.disabled = !Store.canUndo();
+      button.textContent = '撤销上一步';
+      var label = Store.nextUndoLabel();
+      button.title = label ? '将撤销：' + label : '暂无可撤销的修改';
+      button.setAttribute('aria-label',label ? '撤销上一步：' + label : '撤销上一步');
+    });
+  }
+
   function boot() {
     if (!Store || !Parser || !Render) {
       console.error('[ui] 依赖脚本未加载完整');
       return;
     }
+    Store.onHistoryChange = refreshUndo;
     bind();
+    refreshUndo();
     updateThemeButton(currentTheme());
 
     /* 背景特效要先应用，避免先渲染默认款再切一下闪动 */

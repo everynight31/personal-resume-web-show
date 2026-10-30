@@ -102,6 +102,7 @@
     history = deepClone(value).slice(-HISTORY_LIMIT);
     try { global.sessionStorage.setItem(SS_HISTORY, JSON.stringify(history)); Store.historyNotice = ''; }
     catch (_) { Store.historyNotice = '当前环境无法持久保存撤销历史，历史仅在本页有效'; }
+    if (typeof Store.onHistoryChange === 'function') Store.onHistoryChange();
   }
 
   function defaults() {
@@ -232,6 +233,19 @@
       return copy;
     },
 
+    /** 界面数据修改的统一入口：失败和无变化不产生历史。 */
+    commit: function (data, label) {
+      var before = this.load();
+      var next = validateData(data);
+      var comparable = validateData(before);
+      if (next.meta) next.meta.dataVersion = currentVersion();
+      if (comparable.meta) comparable.meta.dataVersion = currentVersion();
+      if (JSON.stringify(comparable) === JSON.stringify(next)) return before;
+      var saved = this.save(next);
+      this.pushUndo(before, label || '编辑简历');
+      return saved;
+    },
+
     /**
      * 应用一组补丁
      * @param {Array<{path:string, value:*}>} patches
@@ -250,11 +264,13 @@
 
     /** 恢复 data.js 默认数据（清掉本地覆盖） */
     reset: function () {
+      var before = this.load();
       var raw = null;
       try { raw = localStorage.getItem(LS_DATA); } catch (_) {}
       if (raw && !this.backup(raw, 'reset')) throw new Error('无法备份现有数据，请先导出再恢复默认数据');
       try { localStorage.removeItem(LS_DATA); } catch (e) { throw new Error('无法恢复默认数据：' + e.message); }
       this.dataNotice = ''; this.recoveryPending = false;
+      if (raw) this.pushUndo(before,'恢复默认数据');
       return defaults();
     },
 
@@ -273,7 +289,7 @@
       return validateData(parsed);
     },
 
-    importData: function (obj) { return this.save(validateData(obj)); },
+    importData: function (obj) { return this.commit(validateData(obj),'导入数据'); },
 
     /* -------------------------------------------------- 区块（模块）管理 */
 
@@ -283,14 +299,14 @@
      * @param {Object} patch 形如 { 'profile.name': '张三', sections: [...] }
      *                       以 '.' 分隔的是按路径写入，其余（如 sections）是整体替换
      */
-    update: function (patch) {
+    update: function (patch, label) {
       var next = deepClone(this.load());
       Object.keys(patch || {}).forEach(function (key) {
         if (!key.split('.').every(safeKey)) return;
         if (key.indexOf('.') === -1) next[key] = deepClone(patch[key]);
         else setByPath(next, key, deepClone(patch[key]));
       });
-      return this.save(next);
+      return this.commit(next,label || '编辑简历');
     },
 
     /** 删除一个区块，返回新数据 */
@@ -299,7 +315,7 @@
       var before = (next.sections || []).length;
       next.sections = (next.sections || []).filter(function (s) { return s.id !== id; });
       if (next.sections.length === before) return null;   /* 没找到，别白写一次 */
-      return this.save(next);
+      return this.commit(next,'删除模块');
     },
 
     /**
@@ -318,18 +334,20 @@
       var tmp = list[i];
       list[i] = list[j];
       list[j] = tmp;
-      return this.save(next);
+      return this.commit(next,'调整模块顺序');
     },
 
     /* ------------------------------------------------------------ 撤销 */
     getUndoState: function () { return deepClone(readHistory()); },
     restoreUndoState: function (state) { writeHistory(state); },
-    pushUndo: function (snapshot) { var next = readHistory().slice(); next.push(validateData(snapshot)); writeHistory(next); },
+    pushUndo: function (snapshot, label) { var next = readHistory().slice(); next.push({data:validateData(snapshot),label:label || '编辑简历'}); writeHistory(next); },
+    nextUndoLabel: function () { var stack=readHistory();return stack.length ? (stack[stack.length-1].label || '编辑简历') : ''; },
     canUndo: function () { return readHistory().length > 0; },
     undo: function () {
       var stack = readHistory();
       if (!stack.length) return null;
-      var restored = this.save(validateData(stack[stack.length - 1]));
+      var entry = stack[stack.length - 1];
+      var restored = this.save(validateData(entry.data && !entry.profile ? entry.data : entry));
       writeHistory(stack.slice(0,-1));
       return restored;
     },

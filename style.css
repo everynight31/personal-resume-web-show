@@ -2153,3 +2153,8 @@ html[data-theme="dark"] .toast { background: rgba(245, 245, 247, 0.95); color: #
 
 .recovery-notice { position:relative;z-index:2;margin:12px auto;padding:14px 18px;max-width:960px;background:var(--surface);color:var(--text);border:1px solid var(--primary);border-radius:12px;line-height:1.7; }
 @media print { .recovery-notice { display:none !important; } }
+
+.module-visibility { padding:5px 9px;font-size:12px;white-space:nowrap; }
+.module-visibility-state { white-space:nowrap; }
+.module-card-head { flex-wrap:wrap; }
+.module-card-head > button[aria-expanded] { flex:none; }

@@ -280,7 +280,7 @@ E-mail：example@example.com
 }
 
 /* ============================================================ 场景 6：补丁生成 */
-console.log('\n══════ 场景 6：Review → 数据补丁 ══════');
+console.log('\n══════ 场景 6：独立补丁 API（界面应用另由 panel.test.js 验证） ══════');
 {
   const rev = Parser.parse(RESUME_LABELED);
   const patches = Parser.parseToPatches(rev);

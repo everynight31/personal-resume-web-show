@@ -704,11 +704,8 @@
       return;
     }
 
-    var previousUndo = Store.getUndoState();
-    Store.pushUndo(before);
-    try { Store.save(next); }
+    try { Store.commit(next,'应用识别 / 校对'); }
     catch (error) {
-      Store.restoreUndoState(previousUndo);
       status(els.applyStatus, '保存失败：' + error.message + '；请压缩头像或导出备份后释放空间。', 'err');
       els.applyStatus.classList.remove('is-ok');
       els.applyStatus.classList.add('is-err');
@@ -719,7 +716,7 @@
     status(els.applyStatus, '已应用 ' + applied + ' 项修改到简历' + (Store.historyNotice ? '；' + Store.historyNotice : ''), 'ok');
     els.applyStatus.classList.add('is-ok');
     els.applyStatus.classList.remove('is-err');
-    if (els.btnUndo) els.btnUndo.disabled = false;
+    if (els.btnUndo) els.btnUndo.disabled = !Store.canUndo();
     toast('已应用到简历（可撤销）');
   }
 

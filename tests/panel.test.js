@@ -143,7 +143,7 @@ function makeEnv(timers) {
     'btn-expand-all', 'btn-collapse-all', 'btn-apply', 'btn-undo', 'btn-discard',
     'apply-status', 'mini-preview', 'mini-badge', 'toast',
     'llm-enabled', 'llm-key', 'llm-base', 'llm-model', 'llm-trigger', 'llm-status',
-    'btn-llm-clear', 'btn-llm-test', 'btn-export', 'btn-import', 'import-input',
+    'btn-llm-clear', 'btn-llm-test', 'btn-settings-undo', 'btn-export', 'btn-import', 'import-input',
     'btn-reset', 'data-status', 'effect-grid', 'bg-density', 'bg-density-value',
     'btn-bg-reset', 'bg-status',
     /* 头像与模块管理（模块编辑器的测试要用） */
@@ -601,6 +601,7 @@ const moduleTypingDone = (async function () {
   /* 值确实落盘了 */
   const saved = Store.load().sections[0].items[0].org;
   ok(saved === typed, '8.5 输入的值应写入 store', JSON.stringify(saved));
+  ok(Store.nextUndoLabel()==='编辑模块内容','8.7 模块内容输入实际记录撤销');
 
   /* 条目标题应就地更新，而不是靠重建 */
   const titleEl = list.descendants(n => n.className === 'module-item-title')[0];
@@ -722,6 +723,47 @@ const moduleTypingDone = (async function () {
   win.document.getElementById('raw-input').value='示例内容';win.ResumeUI.parse(false);
   ok(requests===test.want,'13.'+(index+1)+' 联网策略符合 enabled / key / trigger / 质量阈值');
 });
+
+/* 界面实际应用路径：旧 internship 与识别出的 internships 必须合并。 */
+{
+  const win=makeEnv(), store=win.ResumeStore, ui=win.ResumeUI;
+  const base=store.load();base.sections=[{id:'internship',anchor:'work-anchor',title:'实习经历',sort:'cards',items:[{org:'旧公司',blocks:[]}]}];store.save(base);
+  ui._setReview(win.ResumeParser.parse('【实习经历】\n新公司 | 2024.01 - 2024.06 | 开发实习生\n技术实现：完成接口开发'));
+  ui._renderReviewForTest();ui._applyReviewForTest();
+  const result=store.load().sections;
+  ok(result.length===1,'14.1 internship / internships 不生成重复模块');
+  ok(result[0].id==='internship' && result[0].anchor==='work-anchor','14.2 识别覆盖保留已有稳定 id 和锚点');
+  ok(JSON.stringify(result).includes('新公司'),'14.3 实际应用使用新识别内容');
+}
+{
+  const win=makeEnv(),store=win.ResumeStore,ui=win.ResumeUI;
+  const base=store.load();base.sections=[{id:'a',title:'第一项',sort:'list',items:[{text:'a'}]},{id:'b',title:'隐藏项',hidden:true,sort:'list',items:[{text:'b'}]}];store.save(base);ui._renderModuleManagerForTest();
+  const list=win.document.getElementById('module-list');
+  const toggle=list.descendants(n=>n.tagName==='BUTTON'&&n.getAttribute('aria-expanded')==='false')[0];
+  ok(!!toggle,'15.1 折叠模块具有原生可聚焦按钮');
+  const show=list.descendants(n=>n.tagName==='BUTTON'&&n.title==='显示模块')[0];
+  ok(!!show,'15.2 隐藏模块有明确显示开关');
+  if(toggle){toggle.dispatch('click');ok(toggle.getAttribute('aria-expanded')==='true','15.4 原生展开按钮更新 aria-expanded');}
+  if(show){show.dispatch('click');ok(!store.load().sections[1].hidden,'15.3 显示开关实际恢复模块');}
+}
+
+/* 页面垃圾桶绑定使用稳定数据 id，失败删除不会污染现有历史。 */
+{
+  const win=makeEnv(),store=win.ResumeStore,ui=win.ResumeUI;
+  const base=store.load();base.sections=[{id:'actual-id',anchor:'different-anchor',title:'锚点不同',sort:'list',items:[{text:'内容'}]}];store.save(base);
+  store.pushUndo(base,'更早的操作');
+  const sec={id:'different-anchor',dataset:{sectionId:'actual-id'},querySelector:()=>({textContent:'锚点不同'})};
+  const button={closest:()=>sec};
+  const event={target:{closest:()=>button},preventDefault(){}};
+  win.document.getElementById('resume-root').dispatch('click',event);
+  ok(store.load().sections.length===0,'16.1 页面垃圾桶按数据 id 删除 anchor 不同的模块');
+  ok(store.nextUndoLabel()==='删除模块','16.2 删除实际记入撤销标签');
+  const count=store.getUndoState().length;
+  win.document.getElementById('resume-root').dispatch('click',event);
+  ok(store.getUndoState().length===count,'16.3 重复删除不存在模块不新增撤销');
+  win.document.getElementById('btn-undo').dispatch('click');
+  ok(store.load().sections.length===1 && store.nextUndoLabel()==='更早的操作','16.4 撤销删除后仍保留更早操作');
+}
 
 Promise.resolve(panelEditDone)
   .then(function () { return unparsedEditDone; })

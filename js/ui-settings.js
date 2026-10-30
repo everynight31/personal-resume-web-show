@@ -138,6 +138,8 @@
     });
   }
 
+  var expandedModules = Object.create(null);
+
   function buildModuleCard(sec, index, total) {
     var card = el('div', 'module-card' + (index === 0 ? '' : ' is-collapsed'));
     card.dataset.sectionId = sec.id;
@@ -159,20 +161,50 @@
     tools.appendChild(moduleBtn('remove', '删除这个模块', false, function () {
       removeModule(sec.id, sec.title);
     }));
+    var visibility = document.createElement('button');
+    visibility.type = 'button'; visibility.className = 'btn ghost module-visibility';
+    visibility.title = sec.hidden ? '显示模块' : '隐藏模块'; visibility.textContent = visibility.title;
+    visibility.setAttribute('aria-pressed', sec.hidden ? 'false' : 'true');
+    visibility.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var next = Store.load(), target = next.sections.filter(function (item) { return item.id === sec.id; })[0];
+      if (!target) return;
+      target.hidden = !target.hidden;
+      try { Store.commit(next,target.hidden ? '隐藏模块' : '显示模块'); }
+      catch (error) { status(els.moduleStatus,error.message,'err'); return; }
+      renderMain(); renderModuleManager();
+      var nextButton = els.moduleList.querySelector('[data-section-id="' + sec.id + '"] .module-visibility');
+      if (nextButton) nextButton.focus();
+      if (state.draft) { state.draft = Store.load(); renderMini(); }
+    });
+    tools.appendChild(visibility);
+    head.appendChild(el('span','module-tag module-visibility-state',sec.hidden ? '已隐藏' : '显示中'));
     head.appendChild(tools);
 
-    var caretWrap = el('span', 'module-btn');
+    var caretWrap = el('button', 'module-btn');
+    caretWrap.type = 'button';
+    caretWrap.setAttribute('aria-label','展开 / 收起「' + (sec.title || sec.id) + '」');
+    caretWrap.setAttribute('aria-controls','module-editor-' + sec.id);
     caretWrap.innerHTML = '<svg class="module-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9.5l6 6 6-6"/></svg>';
     head.appendChild(caretWrap);
 
     head.addEventListener('click', function (e) {
       if (tools.contains(e.target)) return;
-      card.classList.toggle('is-collapsed');
+      toggleCard(card.classList.contains('is-collapsed'));
     });
     card.appendChild(head);
 
     /* ---------- 主体 ---------- */
     var body = el('div', 'module-body');
+    body.id = 'module-editor-' + sec.id;
+    function toggleCard(open) {
+      expandedModules[sec.id] = open;
+      card.classList.toggle('is-collapsed',!open); body.hidden = !open;
+      caretWrap.setAttribute('aria-expanded',open ? 'true' : 'false');
+    }
+    caretWrap.addEventListener('click',function (event) { event.stopPropagation();toggleCard(card.classList.contains('is-collapsed')); });
+    toggleCard(expandedModules[sec.id] === undefined ? index === 0 : expandedModules[sec.id]);
+    if (sec.hidden) body.appendChild(el('p','field-hint','该模块已隐藏；编辑会保存内容，点击「显示模块」后恢复到简历。'));
 
     /* 名称 */
     var nameField = el('div', 'module-field');
@@ -186,8 +218,8 @@
       var target = (next.sections || []).filter(function (s) { return s.id === sec.id; })[0];
       if (!target) return;
       target.title = nameInput.value.trim() || target.title;
-      Store.save(next);
-      head.querySelector('.module-name').textContent = target.title;
+      try { Store.commit(next,'重命名模块'); } catch (error) { status(els.moduleStatus,error.message,'err'); return; }
+      var label = head.querySelector('.module-name'); if (label) label.textContent = target.title;
       renderMain();
     }, 400));
     nameField.appendChild(nameInput);
@@ -211,13 +243,13 @@
         if (!target.items || !target.items.length) target.items = [blankItem(v)];
         delete target.groups;
       }
-      Store.save(next);
+      try { Store.commit(next,'切换模块版式'); } catch (error) { status(els.moduleStatus,error.message,'err'); return; }
       renderMain();
       renderModuleManager();
       toast('已切换为「' + SORT_LABEL_SHORT[v] + '」，可在下方填写内容');
     }));
     sortField.appendChild(el('div', 'field-hint',
-      '换版式不会删掉已有内容，但字段结构不同，建议切换后核对一下。'));
+      '换版式会调整内容字段，请核对结果；可用「撤销上一步」恢复。'));
     body.appendChild(sortField);
 
     /* 内容编辑 */
@@ -279,7 +311,7 @@
       var target = (next.sections || []).filter(function (s) { return s.id === sec.id; })[0];
       if (!target) return;
       fn(target);
-      Store.save(next);
+      try { Store.commit(next,'编辑模块内容'); } catch (error) { status(els.moduleStatus,error.message,'err'); return; }
       renderMain();
       if (redrawEditor) renderModuleManager();
       if (state.draft) { state.draft = Store.load(); renderMini(); }
@@ -497,20 +529,21 @@
 
   function removeModule(id, title) {
     var sec = findSection(id);
+    if (!sec) { status(els.moduleStatus,'模块已不存在，未执行删除','warn'); return; }
     var hasContent = false;
     try { hasContent = JSON.stringify(sec).length > 120; } catch (e) { hasContent = true; }
     var msg = hasContent
-      ? '确定删除模块「' + (title || id) + '」吗？里面的内容会一起删掉（可用「撤销上次应用」找回）。'
+      ? '确定删除模块「' + (title || id) + '」吗？里面的内容会一起删掉（可用「撤销上一步」找回）。'
       : '确定删除模块「' + (title || id) + '」吗？';
     if (!global.confirm(msg)) return;
 
-    Store.pushUndo(Store.load());
-    var next = Store.removeSection(id);
+    var next;
+    try { next = Store.removeSection(id); } catch (error) { status(els.moduleStatus,error.message,'err'); return; }
     if (!next) return;
     renderMain();
     renderModuleManager();
     if (state.draft) { state.draft = Store.load(); renderMini(); }
-    if (els.btnUndo) els.btnUndo.disabled = false;
+    if (els.btnUndo) els.btnUndo.disabled = !Store.canUndo();
     status(els.moduleStatus, '已删除模块「' + (title || id) + '」', 'ok');
     toast('已删除模块，可用「撤销」找回');
   }
@@ -537,12 +570,11 @@
     if (sort === 'tags') sec.groups = [{ title: title, items: [] }];
     else sec.items = [blankItem(sort)];
 
-    Store.pushUndo(data);
-    Store.update({ sections: sections.concat([sec]) });
+    try { Store.update({ sections: sections.concat([sec]) },'新建模块'); } catch (error) { status(els.moduleStatus,error.message,'err'); return; }
     if (input) input.value = '';
     renderMain();
     renderModuleManager();
-    if (els.btnUndo) els.btnUndo.disabled = false;
+    if (els.btnUndo) els.btnUndo.disabled = !Store.canUndo();
 
     status(els.moduleStatus,
       '已新建「' + title + '」（版式：' + (SORT_LABEL_SHORT[sort] || sort) + '），在下面填写内容即可', 'ok');
@@ -551,7 +583,10 @@
     /* 滚到新模块并聚焦名称输入框 */
     var card = els.moduleList && els.moduleList.querySelector('[data-section-id="' + id + '"]');
     if (card) {
+      expandedModules[id] = true;
       card.classList.remove('is-collapsed');
+      var body = card.querySelector('.module-body'); if (body) body.hidden = false;
+      var toggle = card.querySelector('[aria-expanded]'); if (toggle) toggle.setAttribute('aria-expanded','true');
       if (card.scrollIntoView) card.scrollIntoView({ block: 'center' });
       var nameInput = card.querySelector('input[type="text"]');
       if (nameInput && nameInput.focus) nameInput.focus();
@@ -683,12 +718,11 @@
         readFile(f, function (txt) {
           try {
             var obj = Store.parseJSON(txt);
-            Store.pushUndo(Store.load());
             Store.importData(obj);
             renderMain();
             state.draft = Store.load();
             renderMini();
-            if (els.btnUndo) els.btnUndo.disabled = false;
+            if (els.btnUndo) els.btnUndo.disabled = !Store.canUndo();
             status(els.dataStatus, '已导入 ' + f.name, 'ok');
             toast('数据已导入');
           } catch (err) {
@@ -702,7 +736,6 @@
     if (els.btnReset) {
       els.btnReset.addEventListener('click', function () {
         if (!global.confirm('确定要放弃网页上的所有修改，恢复 data.js 的默认数据吗？')) return;
-        Store.pushUndo(Store.load());
         try { Store.reset(); }
         catch (error) { status(els.dataStatus, error.message, 'err'); return; }
         renderMain();
@@ -710,7 +743,7 @@
         state.review = null;
         renderReview();
         renderMini();
-        if (els.btnUndo) els.btnUndo.disabled = false;
+        if (els.btnUndo) els.btnUndo.disabled = !Store.canUndo();
         status(els.dataStatus, '已恢复默认数据', 'ok');
         toast('已恢复 data.js 默认数据');
       });

@@ -24,3 +24,11 @@ for(const text of ['{"profile":{"contacts":"bad"}}','{"sections":[{"sort":"cards
 const capped=env();for(let i=0;i<15;i++)capped.ResumeStore.pushUndo({profile:{name:String(i),contacts:[]},sections:[]});assert.equal(capped.ResumeStore.getUndoState().length,10);
 const fail=capped.ResumeStore.getUndoState();capped.localStorage.setItem=()=>{throw new Error('quota');};assert.throws(()=>capped.ResumeStore.undo());assert.equal(capped.ResumeStore.getUndoState().length,fail.length);
 const wiped=env();wiped.ResumeStore.setThemePref('dark');wiped.ResumeStore.pushUndo({profile:{name:'test',contacts:[]},sections:[]});wiped.ResumeStore.wipeLocal();assert.equal(wiped.ResumeStore.getThemePref(),'');assert.ok(!wiped.ResumeStore.canUndo());
+
+const transactions=env();const initial=transactions.ResumeStore.load();
+transactions.ResumeStore.commit(initial,'无变化');const noChangeCount=transactions.ResumeStore.getUndoState().length;
+transactions.ResumeStore.commit(transactions.ResumeStore.load(),'仍无变化');assert.equal(transactions.ResumeStore.getUndoState().length,noChangeCount);
+transactions.ResumeStore.update({'profile.name':'姓名修改'},'编辑姓名');transactions.ResumeStore.update({'profile.avatar':'assets/avatar.svg'},'更换头像');
+assert.equal(transactions.ResumeStore.nextUndoLabel(),'更换头像');transactions.ResumeStore.undo();assert.equal(transactions.ResumeStore.load().profile.avatar,undefined);assert.equal(transactions.ResumeStore.nextUndoLabel(),'编辑姓名');
+transactions.ResumeStore.undo();assert.equal(transactions.ResumeStore.load().profile.name,initial.profile.name);
+const failureCount=transactions.ResumeStore.getUndoState().length;transactions.localStorage.setItem=()=>{throw new Error('quota');};assert.throws(()=>transactions.ResumeStore.update({'profile.name':'失败修改'}));assert.equal(transactions.ResumeStore.getUndoState().length,failureCount);

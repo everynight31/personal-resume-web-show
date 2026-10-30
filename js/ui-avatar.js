@@ -163,7 +163,8 @@
 
   /** 写入头像并重绘页面 */
   function setAvatar(src, note) {
-    Store.update({ 'profile.avatar': src || '' });
+    try { Store.update({ 'profile.avatar': src || '' },'更换 / 调整头像'); }
+    catch (error) { status(els.avatarStatus,error.message,'err'); return; }
     renderMain();
     renderAvatarPreview();
     if (state.draft) { state.draft.profile.avatar = src || ''; renderMini(); }
