@@ -140,4 +140,33 @@ check(arcs === 0, '忽略无效输入坐标');
   check(typeof plain.frame==='function', '纹理画布不可用时仍提供纯色回退');
   plain.frame(0);
 }
+/* 云海纹理复用、数量上限、流动和无效输入。 */
+{
+  let created=0;
+  const g=()=>({addColorStop(){}});
+  const paint={createLinearGradient:g,createRadialGradient:g,fillRect(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},fill(){}};
+  const draws=[];
+  const screen={drawImage(...args){draws.push(args);},fillRect(){}};
+  const cloudEnv={Math,isFinite,Number,document:{createElement(){created++;return {getContext:()=>paint};}}};
+  cloudEnv.window=cloudEnv;
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT,'js/clouds.js'),'utf8'),cloudEnv);
+  const clouds=cloudEnv.ResumeClouds.create(screen,800,600,1,false,()=>.5);
+  clouds.frame(0);
+  check(created===4 && draws.length===13,'云海缓存天空和三种云絮，首帧绘制三层云');
+  const startX=draws[1][1];draws.length=0;clouds.frame(1);
+  check(draws[1][1]!==startX,'云絮会随时间缓慢流动');
+  for(let i=0;i<100;i++)clouds.disturb(i*8,300,true);
+  draws.length=0;clouds.scroll(900);clouds.frame(.1);
+  check(draws.length===13 && created===4,'连续拨雾不累积粒子或重建纹理');
+  check(screen.globalAlpha===1,'云海绘制后恢复透明度');
+  clouds.disturb(NaN,Infinity,true);clouds.scroll(NaN);draws.length=0;clouds.frame(.1);
+  check(draws.every(d=>d.slice(1).every(Number.isFinite)),'无效输入不能造成非法绘制坐标');
+  const dense=cloudEnv.ResumeClouds.create(screen,390,844,99,true,()=>.5);
+  draws.length=0;dense.frame(0);
+  check(draws.length===19,'高强度云量最多18片');
+  cloudEnv.document.createElement=()=>({getContext:()=>null});
+  const plain=cloudEnv.ResumeClouds.create(screen,390,844,1,false,()=>.5);
+  check(typeof plain.frame==='function','云纹理不可用时提供纯色回退');
+  plain.frame(0);
+}
 console.log('通过 ' + checks + ' 项，失败 0 项');
