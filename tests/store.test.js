@@ -138,7 +138,7 @@ console.log('\n-- 背景特效偏好 --');
   const { Store } = makeEnv(DATA_V1);
 
   const def = Store.getBg();
-  ok(def.effect === 'network' && def.density === 1, '7.1 背景默认值应为 network / 1',
+  ok(def.effect === 'water' && def.density === 1, '7.1 背景默认值应为 water / 1',
     JSON.stringify(def));
 
   Store.setBg({ effect: 'starfield' });
@@ -157,7 +157,7 @@ console.log('\n-- 背景特效偏好 --');
   ok(Store.getBg().density === 1, '7.8 非法密度应回落到 1', String(Store.getBg().density));
 
   Store.wipeLocal();
-  ok(Store.getBg().effect === 'network', '7.9 wipeLocal 应清掉背景偏好', Store.getBg().effect);
+  ok(Store.getBg().effect === 'water', '7.9 wipeLocal 应清掉背景偏好', Store.getBg().effect);
 }
 
 /* -------------------------------------------------------- 模块管理 */
