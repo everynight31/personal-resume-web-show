@@ -89,9 +89,9 @@
 
 ### 本地验证
 
-运行 `node tools/serve.js`，然后访问终端显示的本地地址。项目不需要安装依赖。
+运行 `node tools/serve.js`，然后访问终端显示的本地地址。项目不需要安装依赖。服务器仅监听 `127.0.0.1`；可用 `node tools/serve.js 5180` 指定端口（也支持 `PORT` 环境变量）。支持目录首页、GET / HEAD、常见资源类型及请求日志；非法 URL 返回 400，根目录外的路径或符号链接返回 403，端口无效或占用时会给出提示。
 
-回归检查分别运行 `node tests/helpers.test.js`、`node tests/parse.test.js`、`node tests/panel.test.js`、`node tests/render.test.js`、`node tests/store.test.js` 和 `node tests/particles.test.js`。
+回归检查分别运行 `node tests/helpers.test.js`、`node tests/parse.test.js`、`node tests/panel.test.js`、`node tests/render.test.js`、`node tests/store.test.js`、`node tests/particles.test.js` 和 `node tests/serve.test.js`。服务器检查使用临时目录和本地 HTTP 端口，结束后自动清理。
 
 ### 部署到 GitHub Pages
 
