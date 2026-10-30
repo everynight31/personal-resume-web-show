@@ -1783,3 +1783,127 @@ html[data-theme="dark"] .toast { background: rgba(245, 245, 247, 0.95); color: #
   }
   .reveal { animation: none; }
 }
+
+/* 水面文字：只作用于正在展示的主简历，编辑器和缩略稿保持稳定。 */
+@media screen {
+  html[data-background="water"] #resume-root {
+    color: var(--text);
+    --primary: #006b83;
+    --primary-rgb: 0, 107, 131;
+    --text: #163f50;
+    --text-strong: #083d53;
+    --text-soft: #224c5e;
+    --text-muted: #365e6d;
+    --water-shine-a: #064a64;
+    --water-shine-b: #007585;
+    --water-shine-c: #075b92;
+    --water-glow: rgba(235, 255, 255, .5);
+  }
+  html[data-background="water"][data-theme="dark"] #resume-root {
+    --primary: #81e8ee;
+    --primary-rgb: 129, 232, 238;
+    --text: #d4edf1;
+    --text-strong: #e8fbff;
+    --text-soft: #c5e3eb;
+    --text-muted: #b4d3de;
+    --water-shine-a: #ddfcff;
+    --water-shine-b: #76dde5;
+    --water-shine-c: #c0ebff;
+    --water-glow: rgba(71, 218, 237, .22);
+  }
+  html[data-background="water"] #resume-root .name {
+    padding: .08em .1em .14em;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-shadow: 0 2px 22px var(--water-glow);
+    color: var(--text-strong);
+  }
+  @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+    html[data-background="water"] #resume-root .name {
+      background-image: linear-gradient(115deg, var(--water-shine-a) 10%, var(--water-shine-b) 35%, var(--water-shine-c) 55%, var(--water-shine-a) 85%);
+      background-size: 230% 100%;
+      background-position: 20% 50%;
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: none;
+      filter: drop-shadow(0 2px 12px var(--water-glow));
+    }
+  }
+  html[data-background="water"] #resume-root .name .last-name { color: inherit; }
+  html[data-background="water"] #resume-root .headline {
+    font-family: var(--font-sans);
+    font-size: clamp(.95rem, 2.4vw, 1.1rem);
+    line-height: 1.85;
+    letter-spacing: .07em;
+  }
+  html[data-background="water"] #resume-root .intent {
+    color: var(--primary);
+    background: rgba(235, 254, 255, .68);
+    border-color: rgba(var(--primary-rgb), .23);
+    box-shadow: 0 6px 24px rgba(7, 104, 133, .08), inset 0 1px 0 rgba(255,255,255,.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    font-weight: 600;
+    letter-spacing: .03em;
+  }
+  html[data-background="water"] #resume-root .contact-item { font-weight: 500; }
+  html[data-background="water"] #resume-root .contact-item svg { color: var(--primary); }
+  html[data-background="water"] #resume-root .section-title {
+    letter-spacing: .08em;
+    text-shadow: 0 2px 18px var(--water-glow);
+  }
+  html[data-background="water"] #resume-root .section-title::after {
+    width: 76px;
+    height: 3px;
+    border-radius: 100%;
+    background: linear-gradient(90deg, var(--primary), rgba(var(--primary-rgb), .12));
+    box-shadow: 0 3px 10px rgba(var(--primary-rgb), .15);
+  }
+  html[data-background="water"] #resume-root .skill-tag { box-shadow: inset 0 1px 0 rgba(255,255,255,.22); }
+  html[data-background="water"] #resume-root .card,
+  html[data-background="water"] #resume-root .timeline-content {
+    background: rgba(248, 254, 255, .88);
+    border-color: rgba(31, 123, 149, .18);
+  }
+  html[data-background="water"][data-theme="dark"] #resume-root .intent,
+  html[data-background="water"][data-theme="dark"] #resume-root .skill-tag {
+    background: rgba(15, 61, 77, .78);
+    border-color: rgba(129, 232, 238, .28);
+    color: #b8f5f6;
+  }
+  html[data-background="water"][data-theme="dark"] #resume-root .card,
+  html[data-background="water"][data-theme="dark"] #resume-root .timeline-content { background: rgba(12, 32, 44, .93); border-color: rgba(129, 232, 238, .18); }
+  html[data-background="water"][data-theme="dark"] #resume-root .btn.primary,
+  html[data-background="water"][data-theme="dark"] #resume-root .skill-tag.main-skill { background: #14596c; color: #edffff; border-color: #478b9d; }
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-background="water"] #resume-root .name {
+    animation: water-type-drift 8s ease-in-out infinite, water-type-shine 16s ease-in-out infinite;
+  }
+  html[data-background="water"] #resume-root .intent {
+    animation: water-type-drift 10s ease-in-out -3s infinite;
+    --water-type-rise: -3px;
+  }
+  html[data-background="water"] #resume-root .section-title {
+    animation: water-type-drift 11s ease-in-out -2s infinite;
+    --water-type-rise: -2px;
+  }
+  html[data-background="water"] #resume-root .skill-tag {
+    animation: water-type-drift 9s ease-in-out infinite;
+    --water-type-rise: -2px;
+  }
+  html[data-background="water"] #resume-root .skill-tag:nth-child(3n+1) { animation-delay: -2s; }
+  html[data-background="water"] #resume-root .skill-tag:nth-child(3n+2) { animation-delay: -5s; }
+  html[data-background="water"] #resume-root .skill-tag:nth-child(3n) { animation-delay: -7s; }
+  html[data-background="water"] #resume-root .skill-tag:hover { animation-play-state: paused; }
+  @keyframes water-type-drift {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(-.15deg); }
+    50% { transform: translate3d(0, var(--water-type-rise, -5px), 0) rotate(.15deg); }
+  }
+  @keyframes water-type-shine {
+    0%, 100% { background-position: 20% 50%; }
+    50% { background-position: 85% 50%; }
+  }
+}
