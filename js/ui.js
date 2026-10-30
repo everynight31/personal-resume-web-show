@@ -1299,7 +1299,7 @@
     var P = global.ResumeParticles;
     if (P) {
       P.setDensity(cfg.density || 1);
-      P.setEffect(cfg.effect || 'network');
+      P.setEffect(cfg.effect || 'water');
     }
     renderEffectPicker();
   }
@@ -2346,7 +2346,7 @@
 
     if (els.btnBgReset) {
       els.btnBgReset.addEventListener('click', function () {
-        applyBg({ effect: 'network', density: 1 });
+        applyBg(Store.bgDefaults());
         status(els.bgStatus, '已恢复默认背景（粒子连线 · 100%）', 'ok');
         setTimeout(function () { status(els.bgStatus, '', ''); }, 2000);
       });
