@@ -14,7 +14,7 @@
 - **阅读适配**：深浅模式、手机布局、键盘操作，以及系统「减少动态效果」支持；简历正文保持稳定。
 - **备份与打印**：浏览器保存本地修改，JSON 导入 / 导出，首页一键打开打印窗口并另存为 PDF。
 
-默认的规则识别、背景渲染与头像处理均在本机完成，无需联网。可选的「大模型增强识别」需手动启用，启用后会把待识别文本发送到配置的模型接口。
+默认的规则识别、背景渲染与头像处理均在本机完成，无需联网。可选的「大模型增强识别」需手动启用，启用后会把待识别文本发送到配置的模型接口。fallback 会先完成本地解析，仅在解析失败或质量低于 60 分时调用模型；自由文本模式本身不会触发联网。质量提示统一使用 85 / 60 分阈值。API Key 保存在当前浏览器 localStorage，同源脚本可读取，调用时会发送到配置的接口；请只使用可信地址，并在公共电脑上清除 Key。
 
 ---
 
@@ -42,6 +42,10 @@
 5. 点「应用到简历」→ 主页面立即重绘，数据存进浏览器
    - 没勾的模块只是**不显示**，内容仍留在「设置 → 简历模块」里，可以从那里彻底删除
 6. 点错了就「撤销上次应用」
+
+未识别到的姓名、身份、意向、联系方式和成绩保留原值；识别到并勾选才覆盖，主动取消勾选才清空对应字段。保存失败会提示压缩头像或释放空间，原有简历不会被成功提示掩盖。
+
+校对区继续支持原有文本格式；如果分隔符、换行或附加字段会造成转换损失，则使用可编辑的 JSON 数组完整保留内容。JSON 格式未补全时会提示并阻止应用。
 
 > 不粘贴也能用这个面板。还没识别过任何东西时，面板会直接列出简历里已有的全部内容，可以直接改、直接应用 —— 相当于一个简历总编辑器。
 
@@ -91,7 +95,7 @@
 
 运行 `node tools/serve.js`，然后访问终端显示的本地地址。项目不需要安装依赖。服务器仅监听 `127.0.0.1`；可用 `node tools/serve.js 5180` 指定端口（也支持 `PORT` 环境变量）。支持目录首页、GET / HEAD、常见资源类型及请求日志；非法 URL 返回 400，根目录外的路径或符号链接返回 403，端口无效或占用时会给出提示。
 
-回归检查分别运行 `node tests/helpers.test.js`、`node tests/parse.test.js`、`node tests/panel.test.js`、`node tests/render.test.js`、`node tests/store.test.js`、`node tests/particles.test.js` 和 `node tests/serve.test.js`。服务器检查使用临时目录和本地 HTTP 端口，结束后自动清理。
+回归检查分别运行 `node tests/helpers.test.js`、`node tests/parse.test.js`、`node tests/panel.test.js`、`node tests/render.test.js`、`node tests/store.test.js`、`node tests/particles.test.js` 、`node tests/codec.test.js`、`node tests/parser-regressions.test.js` 和 `node tests/serve.test.js`。服务器检查使用临时目录和本地 HTTP 端口，结束后自动清理。
 
 ### 部署到 GitHub Pages
 
@@ -106,3 +110,7 @@
 ---
 
 > 仓库里全是示例数据。姓名「示例姓名」、电话 `13800000000`、邮箱 `@example.com`、学校「示例大学」、公司「某互联网科技有限公司」、所有项目与奖项均为编造，头像也是 SVG 占位图。上传 GitHub 前可以直接用，也可以换成你自己的内容。
+
+### 交互脚本组织
+
+`ui-codec.js` 负责文本与数据互转，`ui-review.js` 负责校对、识别决策、草稿及应用，`ui-drawer.js` 负责抽屉、焦点和键盘操作，`ui-avatar.js` 负责头像处理，`ui-settings.js` 负责设置与模块管理；`ui.js` 只负责元素、共享状态、绑定和启动。全部采用 IIFE 与 `ResumeUIXxx` 工厂命名空间，按 `index.html` 的普通脚本顺序加载，保持零构建与双击运行方式。

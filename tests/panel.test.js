@@ -184,6 +184,7 @@ function makeEnv(timers) {
     setTimeout: timers ? timers.setTimeout : setTimeout,
     clearTimeout: timers ? timers.clearTimeout : clearTimeout
   };
+  win.ResumeLLM = {parseWithLLM: function () { return Promise.reject(new Error('test stub')); }};
   win.window = win;
   win.globalThis = win;
   /* Store.load() 需要一份基准数据 */
@@ -200,6 +201,7 @@ function makeEnv(timers) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/store.js'), 'utf8'), sandbox, { filename: 'store.js' });
   /* applyReview 里会调 renderMain → renderInto，所以渲染层也要加载 */
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/render.js'), 'utf8'), sandbox, { filename: 'render.js' });
+  ['codec','review','drawer','avatar','settings'].forEach(name=>vm.runInContext(fs.readFileSync(path.join(ROOT,'js/ui-'+name+'.js'),'utf8'),sandbox,{filename:'ui-'+name+'.js'}));
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/ui.js'), 'utf8'), sandbox, { filename: 'ui.js' });
   return win;
 }
@@ -665,6 +667,61 @@ const moduleTypingDone = (async function () {
   Array.from(pending.values()).forEach(fn => fn());
   ok(!drawer.hidden && drawer.classList.contains('is-open'), '10.6 快速重开后旧定时器不能隐藏面板');
 }
+
+/* 部分识别必须保留未提及的个人信息和成绩。 */
+{
+  const win=makeEnv(), store=win.ResumeStore, ui=win.ResumeUI;
+  const base=store.load();base.profile.name='原姓名';base.profile.contacts=[{label:'邮箱',value:'kept@example.com'}];
+  base.scores={title:'成绩',total:{label:'总分',value:'90'},items:[]};store.save(base);
+  ui._setReview(win.ResumeParser.parse('【项目经历】\n测试项目 | 2024.01 - 2024.06 | 开发\n技术实现：完成接口开发'));
+  ui._renderReviewForTest();ui._applyReviewForTest();
+  const result=store.load();
+  ok(result.profile.name==='原姓名','11.1 项目局部识别保留姓名');
+  ok(result.profile.contacts[0] && result.profile.contacts[0].value==='kept@example.com','11.2 局部识别保留联系方式');
+  ok(result.scores && result.scores.total.value==='90','11.3 未提及成绩时保留成绩');
+}
+{
+  const win=makeEnv();let requests=0;
+  win.ResumeStore.setLLM({enabled:true,apiKey:'test-only',trigger:'fallback'});
+  win.ResumeParser.parse=()=>({profile:{name:'姓名',contacts:[]},scores:null,sections:[],warnings:[],unparsed:[],mode:'freeform',quality:{score:100,label:'良好'}});
+  // LLM is read during boot; count calls through a test seam without sending network requests.
+  win.ResumeLLM.parseWithLLM=function(){requests++;return Promise.resolve({sections:[],profile:{},quality:{score:100},warnings:[]});};
+  win.document.getElementById('raw-input').value='测试内容';win.ResumeUI.parse(false);
+  ok(requests===0,'11.4 高质量自由文本 fallback 不联网');
+}
+
+{
+  const win=makeEnv(),ui=win.ResumeUI,store=win.ResumeStore;
+  ui._setReview(store.deepClone({profile:{name:'新名字',contacts:[]},scores:null,sections:[],warnings:[],unparsed:[]}));ui._renderReviewForTest();
+  const field=ui._reviewGroups()[0].descendants(n=>n.dataset&&n.dataset.path==='profile.name'&&n.tagName==='INPUT')[0];
+  field.checked=false;field.dispatch('change');ui._applyReviewForTest();
+  ok(store.load().profile.name==='','12.1 主动取消姓名才清空');
+}
+{
+  const win=makeEnv(),ui=win.ResumeUI,store=win.ResumeStore;
+  ui._setReview({profile:{name:'未保存',contacts:[]},scores:null,sections:[],warnings:[],unparsed:[]});ui._renderReviewForTest();
+  const original=store.load().profile.name;store.save=()=>{throw new Error('quota exceeded');};
+  let threw=false;try{ui._applyReviewForTest();}catch(_){threw=true;}
+  ok(!threw && store.load().profile.name===original,'12.2 保存失败不修改已保存简历且不抛出未处理异常');
+  ok(win.document.getElementById('apply-status').dataset.state==='err','12.3 保存失败明确显示错误');
+}
+
+/* 联网策略矩阵：只计数桩接口，不发送任何请求。 */
+[
+  {enabled:true,key:'test',trigger:'fallback',score:59,mode:'labeled',want:1},
+  {enabled:true,key:'test',trigger:'fallback',score:60,mode:'freeform',want:0},
+  {enabled:true,key:'test',trigger:'always',score:100,mode:'labeled',want:1},
+  {enabled:true,key:'test',trigger:'manual',score:0,mode:'freeform',want:0},
+  {enabled:false,key:'test',trigger:'always',score:0,mode:'freeform',want:0},
+  {enabled:true,key:'',trigger:'always',score:0,mode:'freeform',want:0}
+].forEach(function(test,index){
+  const win=makeEnv();let requests=0;
+  win.ResumeStore.setLLM({enabled:test.enabled,apiKey:test.key,trigger:test.trigger});
+  win.ResumeParser.parse=()=>({profile:{name:'测试',contacts:[]},scores:null,sections:[],warnings:[],unparsed:[],mode:test.mode,quality:{score:test.score,label:'测试'}});
+  win.ResumeLLM.parseWithLLM=()=>{requests++;return Promise.resolve({profile:{},sections:[],warnings:[],quality:{score:100}});};
+  win.document.getElementById('raw-input').value='示例内容';win.ResumeUI.parse(false);
+  ok(requests===test.want,'13.'+(index+1)+' 联网策略符合 enabled / key / trigger / 质量阈值');
+});
 
 Promise.resolve(panelEditDone)
   .then(function () { return unparsedEditDone; })

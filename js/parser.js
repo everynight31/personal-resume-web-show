@@ -29,12 +29,13 @@
 
   /* ------------------------------------------------------------ 常量与正则 */
 
+  var QUALITY = { GOOD: 85, POOR: 60 };
   var NL = '\u2013';                       /* en dash，日期区间统一用它连接 */
   var ARROW = ' | ';
 
   /* 日期：2021.09 / 2021-09 / 2021/9 / 2021年9月 / 2021年 / 至今
      注意：单独一个 2 位数不算日期，否则「效率提升50%…2022.03」会被误判成区间 */
-  var D = '(?:\\d{4}\\s*[.\\-/年]\\s*\\d{1,2}\\s*月?|\\d{4}\\s*年|至今|现在|今|now|Now|NOW|present|Present)';
+  var D = '(?:\\d{4}\\s*[.\\-/年]\\s*\\d{1,2}\\s*月?(?:[.\\-/]\\d{1,2}日?|\\d{1,2}日)?|\\d{4}\\s*年|至今|现在|今|now|Now|NOW|present|Present)';
   var RANGE_RE = new RegExp('(' + D + ')\\s*(?:--|—|–|-|~|～|至|到|to|－)\\s*(' + D + ')');
   var SINGLE_DATE_RE = new RegExp('^' + D + '$');
   /* 只有四位年份才算合法端点，避免 N-M 形式的数字区间被当成日期 */
@@ -42,8 +43,8 @@
   var NOW_ANCHOR = /^\s*(?:至今|现在|今|now|present)/i;
 
   var RE = {
-    phone: /(?:电话|手机|TEL|Tel|tel|Phone|联系方式)?\s*[:：]?\s*(1[3-9]\d{9})/,
-    phoneBare: /1[3-9]\d{9}/,
+    phone: /(?:^|[^\d])(?:\+?86[\s-]*)?(1[3-9]\d(?:[\s-]?\d){8})(?!\d)/,
+    phoneBare: /(?:^|[^\d])(?:\+?86[\s-]*)?(1[3-9]\d(?:[\s-]?\d){8})(?!\d)/,
     email: /([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/,
     url: /((?:https?:\/\/|www\.)[^\s，。；、|]+)/i,
     nameLine: /^(?:姓名|名字|NAME|Name)\s*[:：]?\s*(.+)$/,
@@ -142,13 +143,10 @@
   }
 
   function normalizeDate(s) {
-    return trim(String(s == null ? '' : s)
-      .replace(/\s+/g, '')
-      .replace(/(\d{4})[.\-/年](\d{1,2})月?/g, function (m, y, mo) {
-        return y + '.' + (mo.length === 1 ? '0' + mo : mo);
-      })
-      .replace(/年/g, '')
-      .replace(/月/g, ''));
+    var text = trim(s).replace(/\s+/g, '');
+    var match = /^(\d{4})[.\-/年](\d{1,2})(?:月)?(?:[.\-/]?(\d{1,2})日?)?月?$/.exec(text);
+    if (match) return match[1] + '.' + ('0' + match[2]).slice(-2) + (match[3] ? '.' + ('0' + match[3]).slice(-2) : '');
+    return text.replace(/年/g, '').replace(/月/g, '');
   }
 
   function dateToText(a, b) {
@@ -204,13 +202,13 @@
   /* 把一段没有任何换行的长文字，按中文句末标点切成句子（仅当整段只有一个换行时启用） */
   function explodeRunOn(line) {
     if (line.length < 90) return [line];
-    var parts = line.split(/(?<=[。！？；!?;])\s*/).map(trim).filter(Boolean);
+    var parts = line.replace(/([。！？；!?;])\s*/g, '$1\n').split('\n').map(trim).filter(Boolean);
     return parts.length > 1 ? parts : [line];
   }
 
   /* ------------------------------------------------------------ 技能词表桥接 */
   function skillsApi() {
-    return global.ResumeSkills || { extractTags: function (t) { return [{ text: trim(t), level: 'aux' }]; } };
+    return global.ResumeSkills || { scanText: function () { return []; }, extractTags: function (t) { return [{ text: trim(t), level: 'aux' }]; } };
   }
 
   /* ------------------------------------------------------------ 解析主流程 */
@@ -259,7 +257,7 @@
       var isMd = !!(mt && mt[2] !== undefined);
       var title = mt ? cleanPiece(isMd ? mt[2] : mt[1]) : '';
       var headingLevel = isMd ? mt[1].length : 0;
-      var meta = title ? lookupSection(title) : null;
+      var meta = title ? lookupSection(title, warnings) : null;
 
       if (meta) {
         /* Markdown 一级标题后面紧跟联系方式 → 这行其实是姓名 */
@@ -278,12 +276,11 @@
       }
 
       /* 没有【】但整行就是一个已知区块名（例如 Word 里粘出来只剩标题行）。
-         lookupSection 已要求至少 3 字且必须是完整包含关系，所以这里不必再收紧，
-         否则「项目经历」这类紧跟在上一段内容后面的标题会漏掉 */
-      var bareMeta = (bare.length <= 12 && !RE.labelLine.test(bare) && !isDateLike(bare) &&
+         这里只接受完整别名或带括号后缀的别名，避免把「科研经历较少」当成标题 */
+      var bareMeta = (bare.length <= 60 && !RE.labelLine.test(bare) && !isDateLike(bare) &&
                       !RE.bullet.test(line) && line.trim() === bare &&
                       !/^[\d\s.\-–—~～至/年月]+$/.test(bare))
-        ? lookupSection(bare) : null;
+        ? lookupSection(bare, warnings, true) : null;
       if (bareMeta) {
         sawAnyHeading = true;
         current = pushBlock(blocks, bareMeta, bare);
@@ -294,11 +291,11 @@
          · 一级标题，或「姓名 + 联系方式」紧随其后 → 这是姓名
          · 其余（### 项目名、## 获奖…）→ 当普通行留给当前区块处理 */
       if (isMd) {
-        var nextText = '';
+        var mdNextText = '';
         for (var n2 = lineIdx + 1; n2 < lines.length && n2 <= lineIdx + 3; n2++) {
-          if (trim(lines[n2])) { nextText = lines[n2]; break; }
+          if (trim(lines[n2])) { mdNextText = lines[n2]; break; }
         }
-        var contactNext = RE.phone.test(nextText) || RE.email.test(nextText);
+        var contactNext = RE.phone.test(mdNextText) || RE.email.test(mdNextText);
         var nameLike = headingLevel === 1 || (contactNext && RE.mdName.test(line));
         if (nameLike) {
           head.lines.push({ text: '姓名：' + cleanPiece(title), bullet: false });
@@ -367,24 +364,18 @@
     };
   }
 
-  function lookupSection(title) {
+  function lookupSection(title, warnings, exact) {
     if (!title) return null;
     var key = cleanPiece(title).replace(/[\s:：]/g, '');
+    if (exact) key = key.replace(/[（(][^）)]*[）)]$/, '');
     if (SECTION_MAP[key]) return SECTION_MAP[key];
-
-    /* 宽松包含匹配：「项目经历（节选）」这类。
-       要求短的一方至少 3 个字，且包含关系只认「长串含短串」，
-       否则「某毕业设计」里的「管理」会命中「教育…」之类造成误判 */
-    var keys = Object.keys(SECTION_MAP);
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      var shorter = key.length <= k.length ? key : k;
-      var longer = key.length <= k.length ? k : key;
-      if (shorter.length >= 3 && longer.indexOf(shorter) !== -1) {
-        return SECTION_MAP[k];
-      }
-    }
-    return null;
+    if (exact) return null;
+    var matches = Object.keys(SECTION_MAP).filter(function (k) { return k.length >= 3 && key.indexOf(k) !== -1; });
+    matches.sort(function (a, b) { return b.length - a.length || a.localeCompare(b); });
+    var ids = [];
+    matches.forEach(function (k) { if (ids.indexOf(SECTION_MAP[k].id) === -1) ids.push(SECTION_MAP[k].id); });
+    if (warnings && ids.length > 1) warnings.push('标题「' + title + '」匹配多个区块，请核对归类');
+    return matches.length ? SECTION_MAP[matches[0]] : null;
   }
 
   function pushBlock(blocks, meta, rawTitle) {
@@ -485,13 +476,10 @@
 
   function collectContacts(line, profile, others) {
     var rest = line;
-    RE.phone.lastIndex = 0;   /* 该正则带 g 标志，复用前必须重置 */
-    RE.email.lastIndex = 0;
-    RE.url.lastIndex = 0;
 
     var mp = RE.phone.exec(rest);
     if (mp) {
-      if (!hasContact(profile, '电话')) profile.contacts.push({ label: '电话', value: mp[1], href: 'tel:' + mp[1], icon: 'phone' });
+      if (!hasContact(profile, '电话')) profile.contacts.push({ label: '电话', value: mp[1].replace(/\D/g, ''), href: 'tel:' + mp[1].replace(/\D/g, ''), icon: 'phone' });
       rest = rest.replace(mp[0], ' ');
     }
     var me = RE.email.exec(rest);
@@ -501,7 +489,7 @@
     }
     var mu = RE.url.exec(rest);
     if (mu) {
-      var url = mu[1];
+      var url = mu[1].replace(/[.,;!?，。；！？)）\]】]+$/, '');
       if (!hasContact(profile, '主页')) {
         profile.contacts.push({ label: '主页', value: url.replace(/^https?:\/\//, ''), href: /^https?:/.test(url) ? url : 'https://' + url, icon: 'link' });
       }
@@ -550,7 +538,7 @@
      但没有成绩行时不会给识别完整度扣分。 */
 
   /* 触发词：形如「综合测评：总分90 数学95 专业课92」 */
-  var SCORE_KEYWORDS = ['初试', '复试成绩', '笔试成绩', '考试成绩', '考研成绩', '综合测评', '总分', '成绩'];
+  var SCORE_KEYWORDS = ['初试', '复试成绩', '笔试成绩', '考试成绩', '考研成绩', '综合测评', '总分'];
   var SCORE_ITEM_RE = /([\u4e00-\u9fa5A-Za-z]{2,10}?)\s*[:：]?\s*(\d{2,3}(?:\.\d+)?)\s*分?/g;
 
   function extractScores(textLines) {
@@ -566,7 +554,7 @@
     var seg = joined.slice(idx);
     var total = '';
     var mt = /总分\s*[:：]?\s*(\d{2,3})/.exec(seg);
-    if (mt) total = mt[1];
+    if (mt && !/^[\d.]*\s*%/.test(seg.slice(mt.index + mt[0].length))) total = mt[1];
 
     var items = [];
     var seen = Object.create(null);
@@ -575,6 +563,7 @@
     while ((m = SCORE_ITEM_RE.exec(seg)) !== null) {
       var label = cleanPiece(m[1]).replace(/^(初试成绩|复试成绩|笔试成绩|考试成绩|考研成绩|综合测评|总分)$/, '');
       var value = m[2];
+      if (/^[\d.]*\s*%/.test(seg.slice(m.index + m[0].length))) continue;
       if (!label) continue;
       if (label.length > 8) continue;
       if (seen[label]) continue;
@@ -654,7 +643,7 @@
       items.push(it2);
     }
 
-    return { id: block.id, title: block.title, sort: 'timeline', src: block.id === '__basic' ? 'labeled' : 'labeled', items: items };
+    return { id: block.id, title: block.title, sort: 'timeline', src: 'labeled', items: items };
   }
 
   function newTimelineItem() {
@@ -1057,8 +1046,7 @@
       var line = textLines[cursor];
       var looksHeader = RE.phone.test(line) || RE.email.test(line) || RE.intentLine.test(line) ||
         /^[\u4e00-\u9fa5·]{2,4}$/.test(trim(line)) || RE.nameLine.test(line);
-      if (!looksHeader && headerLines.length) break;
-      if (!looksHeader && !headerLines.length) break;
+      if (!looksHeader) break;
       headerLines.push(line);
       cursor++;
     }
@@ -1068,9 +1056,8 @@
       if ((m = RE.nameLine.exec(line))) { name = cleanPiece(m[1]); return; }
       if ((m = RE.intentLine.exec(line))) { intent = cleanPiece(m[1]); return; }
       if ((m = RE.inlineIntent.exec(cleanPiece(line)))) {
-        var mi = RE.inlineIntent.exec(cleanPiece(line));
-        name = name || mi[1];
-        intent = intent || mi[3];
+        name = name || m[1];
+        intent = intent || m[3];
         return;
       }
       if (/^[\u4e00-\u9fa5·]{2,4}$/.test(trim(line)) && !name) { name = trim(line); return; }
@@ -1179,14 +1166,14 @@
       if (!built) return;
       var count = (built.items && built.items.length) || (built.groups && built.groups.length) || 0;
       if (!count) return;
-      if (ch.sort === 'tags') {
+      if (hint.sort === 'tags') {
         /* 技能块合并成一组 */
-        var exist = merged[ch.id];
+        var exist = merged[hint.id];
         if (exist) {
           built.groups.forEach(function (g) { exist.groups.push(g); });
         } else {
           built.src = 'inferred';
-          merged[ch.id] = built;
+          merged[hint.id] = built;
           sections.push(built);
         }
         return;
@@ -1252,7 +1239,7 @@
     } else { total++; }
 
     var score = total ? hits / total : 0;
-    var label = score >= 0.85 ? '识别良好' : score >= 0.6 ? '基本可用，建议核对' : '识别较差，请重点核对';
+    var label = score * 100 >= QUALITY.GOOD ? '识别良好' : score * 100 >= QUALITY.POOR ? '基本可用，建议核对' : '识别较差，请重点核对';
     return { score: Math.round(score * 100), label: label, hits: hits, lines: total, mode: res.mode };
   }
 
@@ -1356,6 +1343,7 @@
   /* ------------------------------------------------------------ 对外接口 */
 
   var API = {
+    QUALITY: QUALITY,
     parse: parse,
     parseToPatches: parseToPatches,
     freeformParse: freeformParse,

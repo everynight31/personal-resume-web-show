@@ -165,6 +165,7 @@
 
       <div class="field">
         <label for="llm-key">API Key</label>
+        <p class="hint">Key 会保存在当前浏览器的 localStorage，同源脚本可读取。请只填写可信的模型接口地址；启用后，调用会将简历文本和 Key 发送至该接口。在公共电脑上使用后请清除 Key。</p>
         <input type="password" id="llm-key" placeholder="sk-..." autocomplete="off" spellcheck="false">
       </div>
 
@@ -308,6 +309,11 @@
 <script src="js/clouds.js" defer></script>
 <script src="js/petals.js" defer></script>
 <script src="js/particles.js" defer></script>
+<script src="js/ui-codec.js" defer></script>
+<script src="js/ui-review.js" defer></script>
+<script src="js/ui-drawer.js" defer></script>
+<script src="js/ui-avatar.js" defer></script>
+<script src="js/ui-settings.js" defer></script>
 <script src="js/ui.js" defer></script>
 </body>
 </html>
