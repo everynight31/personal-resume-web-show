@@ -1116,8 +1116,30 @@
 
   /* ================================================================ 抽屉 */
 
+  var drawerCloseTimer = null;
+  var backgroundState = [];
+  var previousOverflow = '';
+
+  function lockBackground() {
+    previousOverflow = document.body.style.overflow;
+    backgroundState = Array.prototype.map.call(document.querySelectorAll('body > .container, body > .fab-wrap, body > .skip-link'), function (node) {
+      var entry = { node: node, inert: node.inert };
+      node.inert = true;
+      return entry;
+    });
+    document.body.style.overflow = 'hidden';
+  }
+
+  function unlockBackground() {
+    backgroundState.forEach(function (entry) { entry.node.inert = entry.inert; });
+    backgroundState = [];
+    document.body.style.overflow = previousOverflow;
+  }
+
   function openDrawer() {
     if (!els.drawer) return;
+    if (els.drawer.classList.contains('is-open')) return;
+    clearTimeout(drawerCloseTimer);
     state.lastFocus = document.activeElement;
     els.drawer.hidden = false;
     if (els.overlay) els.overlay.hidden = false;
@@ -1125,10 +1147,12 @@
     els.drawer.classList.add('is-open');
     if (els.overlay) els.overlay.classList.add('is-open');
     if (els.fab) els.fab.setAttribute('aria-expanded', 'true');
-    document.body.style.overflow = 'hidden';
+    lockBackground();
+    if (els.close) els.close.focus();
 
     /* 首次打开：预填模板 + 渲染预览 */
     if (els.rawInput && !els.rawInput.value.trim()) els.rawInput.value = Parser.TEMPLATE;
+    if (!state.review) renderReview();
     if (!state.draft) state.draft = Store.load();
     renderMini();
     setTimeout(function () {
@@ -1143,8 +1167,8 @@
     els.drawer.classList.remove('is-open');
     if (els.overlay) els.overlay.classList.remove('is-open');
     if (els.fab) els.fab.setAttribute('aria-expanded', 'false');
-    document.body.style.overflow = '';
-    setTimeout(function () {
+    unlockBackground();
+    drawerCloseTimer = setTimeout(function () {
       els.drawer.hidden = true;
       if (els.overlay) els.overlay.hidden = true;
     }, 340);
@@ -1157,6 +1181,7 @@
     document.documentElement.setAttribute('data-theme', theme);
     document.documentElement.setAttribute('data-theme-source', manual ? 'manual' : 'system');
     if (manual) Store.setThemePref(theme);
+    updateThemeButton(theme);
     if (global.ResumeParticles) global.ResumeParticles.redraw();
   }
 
@@ -1164,13 +1189,21 @@
     return document.documentElement.getAttribute('data-theme') || 'light';
   }
 
+  function updateThemeButton(theme) {
+    if (!els.themeToggle) return;
+    var label = theme === 'dark' ? '切换浅色模式' : '切换深色模式';
+    els.themeToggle.title = label;
+    els.themeToggle.setAttribute('aria-label', label);
+    els.themeToggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+  }
+
   /* ============================================================ 滚动高亮 */
 
   var spyObserver = null;
   function initScrollSpy() {
-    var nav = document.querySelector('.section-nav');
-    if (!nav || !('IntersectionObserver' in window)) return;
     if (spyObserver) spyObserver.disconnect();
+    var nav = document.querySelector('#resume-root .section-nav');
+    if (!nav || !('IntersectionObserver' in window)) return;
 
     var pills = {};
     Array.prototype.forEach.call(nav.querySelectorAll('.nav-pill'), function (a) {
@@ -1182,13 +1215,17 @@
         var a = pills[e.target.id];
         if (!a) return;
         if (e.isIntersecting) {
-          Object.keys(pills).forEach(function (k) { pills[k].classList.remove('is-active'); });
+          Object.keys(pills).forEach(function (k) {
+            pills[k].classList.remove('is-active');
+            pills[k].removeAttribute('aria-current');
+          });
           a.classList.add('is-active');
+          a.setAttribute('aria-current', 'location');
         }
       });
     }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
 
-    Array.prototype.forEach.call(document.querySelectorAll('.resume-section'), function (s) {
+    Array.prototype.forEach.call(document.querySelectorAll('#resume-root .resume-section'), function (s) {
       if (s.id) spyObserver.observe(s);
     });
   }
@@ -2037,6 +2074,17 @@
     if (els.overlay) els.overlay.addEventListener('click', closeDrawer);
 
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab' && els.drawer && els.drawer.classList.contains('is-open')) {
+        var focusable = Array.prototype.filter.call(els.drawer.querySelectorAll('button, a[href], input, textarea, select, [tabindex]'), function (node) {
+          return !node.disabled && node.tabIndex >= 0 && node.getClientRects().length > 0;
+        });
+        var first = focusable[0], last = focusable[focusable.length - 1];
+        if (first && e.shiftKey && (document.activeElement === first || !els.drawer.contains(document.activeElement))) {
+          e.preventDefault(); last.focus();
+        } else if (last && !e.shiftKey && (document.activeElement === last || !els.drawer.contains(document.activeElement))) {
+          e.preventDefault(); first.focus();
+        }
+      }
       if (e.key === 'Escape') {
         if (els.drawer && !els.drawer.hidden) closeDrawer();
       }
@@ -2044,7 +2092,7 @@
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         openDrawer();
-        if (els.rawInput) els.rawInput.focus();
+        if (els.rawInput && els.rawInput.getClientRects().length) els.rawInput.focus();
       }
     });
 
@@ -2056,6 +2104,7 @@
           var on = b === btn;
           b.classList.toggle('is-active', on);
           b.setAttribute('aria-selected', on ? 'true' : 'false');
+          b.tabIndex = on ? 0 : -1;
         });
         Array.prototype.forEach.call(document.querySelectorAll('.drawer-body'), function (p) {
           p.hidden = p.dataset.panel !== tab;
@@ -2069,6 +2118,18 @@
             }
           }, 40);
         }
+      });
+      btn.addEventListener('keydown', function (e) {
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('.seg-btn'));
+        var index = tabs.indexOf(btn);
+        if (e.key === 'ArrowRight') index = (index + 1) % tabs.length;
+        else if (e.key === 'ArrowLeft') index = (index + tabs.length - 1) % tabs.length;
+        else if (e.key === 'Home') index = 0;
+        else if (e.key === 'End') index = tabs.length - 1;
+        else return;
+        e.preventDefault();
+        tabs[index].click();
+        tabs[index].focus();
       });
     });
 
@@ -2331,6 +2392,7 @@
       return;
     }
     bind();
+    updateThemeButton(currentTheme());
 
     /* 背景特效要先应用，避免先渲染默认款再切一下闪动 */
     initBg();
