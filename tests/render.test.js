@@ -165,6 +165,31 @@ console.log('\n══════ 标签页标题派生 ══════');
   ok(sectionTitles(allHidden).length === 0, '7.5 全部隐藏时不应渲染区块');
 }
 
+/* 缩略预览不应污染主页面页脚、标题或产生重复的主页面 ID。 */
+{
+  const { Render, doc } = makeEnv();
+  const footer = {
+    children: [{ textContent: '原页脚' }, { textContent: '原备注' }],
+    querySelector(sel) { return this.children[sel === '#footer-line' ? 0 : 1]; }
+  };
+  doc.getElementById = id => id === 'page-footer' ? footer : null;
+  doc.title = '主简历标题';
+  const container = doc.createElement('div');
+  Render.renderMini(container, {
+    meta: { title: '草稿标题', footer: '草稿页脚', footnote: '草稿备注' },
+    profile: { name: '草稿姓名' },
+    sections: [{ id: 'education', title: '教育', items: [{ text: '草稿' }] }]
+  });
+  ok(footer.children[0].textContent === '原页脚', '8.1 草稿不得改写主页面页脚');
+  ok(footer.children[1].textContent === '原备注', '8.2 草稿不得改写主页面备注');
+  ok(doc.title === '主简历标题', '8.3 草稿不得改写标签页标题');
+  const nodes = [];
+  function walk(n) { nodes.push(n); (n.children || []).forEach(walk); }
+  walk(container);
+  ok(!nodes.some(n => n.id), '8.4 预览不得复用主页面的元素 ID');
+  ok(!nodes.some(n => n.className === 'section-remove' || n.className === 'hero-actions'), '8.5 预览不得渲染页面操作按钮');
+}
+
 console.log('\n' + '═'.repeat(60));
 console.log(`  通过 ${pass} 项，失败 ${fail} 项`);
 if (fail) { console.log('\n  失败明细：'); failures.forEach(f => console.log('   ✗ ' + f)); }

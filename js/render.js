@@ -42,16 +42,16 @@
   }
 
   /* ------------------------------------------------------------------ Hero */
-  function renderHero(data) {
+  function renderHero(data, opts) {
     var p = data.profile || {};
-    var hero = el('section');
-    hero.id = 'hero';
+    var hero = el('section', 'resume-hero');
+    if (!opts.mini) hero.id = 'hero';
 
     /* 打印时头像与姓名并排，故包一层 hero-top */
     var top = el('div', 'hero-top');
 
     var ring = el('div', 'avatar-ring');
-    ring.id = 'avatar-anchor';
+    if (!opts.mini) ring.id = 'avatar-anchor';
     if (p.avatar) {
       var img = document.createElement('img');
       img.className = 'avatar';
@@ -100,7 +100,7 @@
     var sc = data.scores;
     if (sc && ((sc.items && sc.items.length) || (sc.total && sc.total.value))) {
       var box = el('div', 'scores');
-      box.id = 'scores-anchor';
+      if (!opts.mini) box.id = 'scores-anchor';
       var head = el('div', 'scores-head');
       head.appendChild(el('span', 'scores-title', esc(sc.title || '成绩')));
       if (sc.total && sc.total.value) {
@@ -118,6 +118,22 @@
       hero.appendChild(box);
     }
 
+    if (!opts.mini) {
+      var actions = el('div', 'hero-actions');
+      var first = (data.sections || []).filter(function (s) {
+        return s && !s.hidden && ((s.items && s.items.length) || (s.groups && s.groups.length));
+      })[0];
+      if (first) {
+        var browse = el('a', 'btn primary', '浏览简历 <span aria-hidden="true">↓</span>');
+        browse.href = '#' + (first.anchor || first.id || '');
+        actions.appendChild(browse);
+      }
+      var print = el('button', 'btn ghost', '打印 / 导出 PDF');
+      print.type = 'button';
+      print.addEventListener('click', function () { global.print(); });
+      actions.appendChild(print);
+      hero.appendChild(actions);
+    }
     return hero;
   }
 
@@ -131,6 +147,7 @@
     var sections = (data.sections || []).filter(function (s) { return s && s.title; });
     if (sections.length < 2) return null;
     var nav = el('nav', 'section-nav');
+    nav.setAttribute('aria-label', '简历章节');
     sections.forEach(function (s) {
       var a = el('a', 'nav-pill', esc(s.title));
       a.href = '#' + (s.anchor || s.id || '');
@@ -247,7 +264,7 @@
       return;
     }
 
-    root.appendChild(renderHero(data));
+    root.appendChild(renderHero(data, opts));
 
     /* hidden 的区块只是这次不显示，数据仍留在 store 里（设置里能看到、能删）。
        这样「取消勾选某个区块」= 不显示，而不是把内容删掉。 */
@@ -257,11 +274,11 @@
       return n > 0;
     });
 
-    renderNav({ sections: sections }, root);
+    if (!opts.mini) renderNav({ sections: sections }, root);
 
     sections.forEach(function (s) {
       var sec = el('section', 'resume-section');
-      sec.id = s.anchor || s.id || '';
+      if (!opts.mini) sec.id = s.anchor || s.id || '';
       sec.appendChild(el('h2', 'section-title', esc(s.title || '')));
 
       /* 鼠标经过时右上角出现的小垃圾桶，点了就删掉整个模块（打印时隐藏） */
@@ -270,7 +287,7 @@
       del.title = '删除「' + (s.title || '') + '」这个模块';
       del.setAttribute('aria-label', del.title);
       del.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M9 7l.7 12h4.6L15 7"/></svg>';
-      sec.appendChild(del);
+      if (!opts.mini) sec.appendChild(del);
 
       var body;
       switch (s.sort) {
@@ -286,7 +303,7 @@
     var f = (data.meta && data.meta.footer) || '';
     var note = (data.meta && data.meta.footnote) || '';
     var footer = document.getElementById('page-footer');
-    if (footer) {
+    if (footer && !opts.mini) {
       var l1 = footer.querySelector('#footer-line') || footer.children[0];
       var l2 = footer.querySelector('#footer-note') || footer.children[1];
       if (l1) l1.textContent = f;
@@ -368,19 +385,13 @@
 
     var footer = el('footer');
     footer.appendChild(el('p', null, esc((data.meta && data.meta.footer) || '')));
+    footer.appendChild(el('p', null, esc((data.meta && data.meta.footnote) || '')));
 
     inner.appendChild(faux);
     inner.appendChild(footer);
     container.appendChild(inner);
 
-    /* 主渲染逻辑会去找主页面的 footer，这里先记下它的内容，渲染完再还原 */
-    var realFooter = document.getElementById('page-footer');
-    var realLine = realFooter && realFooter.children[0];
-    var keep = realLine ? realLine.textContent : null;
-
     renderInto(root, data, { animate: false, mini: true });
-
-    if (realLine && keep != null) realLine.textContent = keep;
 
     fitMini(container, inner);
   }

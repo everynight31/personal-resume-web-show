@@ -117,7 +117,7 @@ function makeEl(tag) {
   return el;
 }
 
-function makeEnv() {
+function makeEnv(timers) {
   const byId = Object.create(null);
 
   const document = {
@@ -181,7 +181,8 @@ function makeEnv() {
     requestAnimationFrame: (fn) => setTimeout(() => fn(0), 0),
     cancelAnimationFrame() {},
     confirm: () => true,
-    setTimeout, clearTimeout
+    setTimeout: timers ? timers.setTimeout : setTimeout,
+    clearTimeout: timers ? timers.clearTimeout : clearTimeout
   };
   win.window = win;
   win.globalThis = win;
@@ -631,6 +632,38 @@ const moduleTypingDone = (async function () {
     ok(!!secAfter && secAfter.items.length === 1, '9.4 数据也应同步，模块本身还在',
       secAfter ? String(secAfter.items.length) : '(模块被删了)');
   }
+}
+
+/* 打开即编辑；快速重开不能被上一次关闭定时器隐藏，也不能丢失返回焦点。 */
+{
+  const pending = new Map();
+  let nextTimer = 0;
+  const win = makeEnv({
+    setTimeout(fn) { pending.set(++nextTimer, fn); return nextTimer; },
+    clearTimeout(id) { pending.delete(id); }
+  });
+  const doc = win.document;
+  const drawer = doc.getElementById('parser-drawer');
+  const close = doc.getElementById('drawer-close');
+  const fab = doc.getElementById('parser-fab');
+  const background = { inert: false };
+  doc.querySelectorAll = () => [background];
+  close.focus = () => { doc.activeElement = close; };
+  fab.focus = () => { doc.activeElement = fab; };
+  doc.activeElement = fab;
+  doc.body.style.overflow = 'auto';
+  drawer.hidden = true;
+  win.ResumeUI.open();
+  ok(win.ResumeUI._reviewGroups().length > 0, '10.1 首次打开应直接显示现有简历的编辑字段');
+  ok(doc.activeElement === close, '10.2 打开后焦点应进入弹窗');
+  ok(background.inert && doc.body.style.overflow === 'hidden', '10.3 背景不可交互且锁定滚动');
+  win.ResumeUI.open();
+  win.ResumeUI.close();
+  ok(doc.activeElement === fab, '10.4 重复打开不能覆盖返回焦点');
+  ok(!background.inert && doc.body.style.overflow === 'auto', '10.5 关闭后恢复原有背景状态和滚动样式');
+  win.ResumeUI.open();
+  Array.from(pending.values()).forEach(fn => fn());
+  ok(!drawer.hidden && drawer.classList.contains('is-open'), '10.6 快速重开后旧定时器不能隐藏面板');
 }
 
 Promise.resolve(panelEditDone)

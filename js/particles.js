@@ -28,9 +28,10 @@
   var colors = { line: 'rgba(0,113,227,.22)', dot: 'rgba(0,113,227,.55)' };
   var mouse = { x: -9999, y: -9999, active: false };
   var current = null;          /* 当前特效实例 */
-  var currentId = 'network';
+  var currentId = 'water';
   var density = 1;
   var paused = false;
+  var printing = false;
   var rafId = null;
 
   /* ------------------------------------------------------------ 工具函数 */
@@ -89,6 +90,117 @@
   /* ================================================================ 特效库 */
 
   var EFFECTS = {
+
+    clouds: {
+      meta:{id:'clouds',name:'云海晨雾',desc:'晨光、远山和三层云絮缓慢流动，鼠标拨雾，滚动产生远近视差'},
+      init:function(w,h,rnd){
+        if(!global.ResumeClouds)return EFFECTS.waves.init(w,h,rnd);
+        return global.ResumeClouds.create(ctx,w,h,density,document.documentElement.getAttribute('data-theme')==='dark',rnd);
+      }
+    },
+
+    ink: {
+      meta: { id:'ink',name:'水墨晕染',desc:'宣纸与淡墨缓慢洇开，点击落墨、滑动留下柔和墨痕，文字同步切换墨青配色' },
+      init:function(w,h,rnd){
+        if(!global.ResumeInk)return EFFECTS.waves.init(w,h,rnd);
+        return global.ResumeInk.create(ctx,w,h,density,document.documentElement.getAttribute('data-theme')==='dark',rnd);
+      }
+    },
+
+    /* 星光漫游：保留原星空选项，另加有星云、星芒和交互拖尾的背景。 */
+    starlight: {
+      meta: { id: 'starlight', name: '星光漫游', desc: '星云与星芒缓慢闪烁，划过留下星尘，点击绽放星光，偶尔有流星经过' },
+      init: function (w, h, rnd) {
+        var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var stars = [], sparks = [], meteors = [];
+        var elapsed = 0, lastTrail = -1, nextMeteor = 2 + rnd() * 3;
+        var offset = { x: 0, y: 0 }, scroll = 0, targetScroll = 0;
+        var palette = dark ? ['185,209,255','222,194,255','255,226,174'] : ['73,94,169','124,84,161','151,108,40'];
+        var n = count(170, w, h, 65, 280);
+        for (var i=0;i<n;i++) stars.push({
+          x:rnd()*w, y:rnd()*h, r:.5+rnd()*1.35,
+          phase:rnd()*Math.PI*2, speed:.6+rnd()*1.2,
+          depth:.25+rnd()*.75, color:palette[i%3], bright:i%13===0
+        });
+        function halo(x,y,r,color,alpha) {
+          var g=ctx.createRadialGradient(x,y,0,x,y,r);
+          g.addColorStop(0,'rgba('+color+','+alpha+')');
+          g.addColorStop(1,'rgba('+color+',0)');
+          return g;
+        }
+        var clouds = [
+          halo(w*.15,h*.25,Math.max(w,h)*.65,dark?'86,55,162':'172,176,233',dark?.28:.22),
+          halo(w*.85,h*.75,Math.max(w,h)*.55,dark?'38,92,139':'150,196,234',dark?.21:.23)
+        ];
+        function star(x,y,r,color,alpha,cross) {
+          ctx.fillStyle='rgba('+color+','+alpha+')';
+          ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+          if (!cross) return;
+          ctx.fillStyle=halo(x,y,r*7,color,alpha*.35);
+          ctx.fillRect(x-r*7,y-r*7,r*14,r*14);
+          ctx.strokeStyle='rgba('+color+','+alpha*.8+')'; ctx.lineWidth=.8;
+          ctx.beginPath(); ctx.moveTo(x-r*3.5,y); ctx.lineTo(x+r*3.5,y);
+          ctx.moveTo(x,y-r*4.5); ctx.lineTo(x,y+r*4.5); ctx.stroke();
+        }
+        function disturb(x,y,force) {
+          if (!isFinite(x) || !isFinite(y) || (!force && elapsed-lastTrail<.05)) return;
+          lastTrail=elapsed;
+          for (var k=0;k<(force?10:1);k++) {
+            var angle=rnd()*Math.PI*2;
+            sparks.push({x:x,y:y,vx:Math.cos(angle)*(force?38:12),vy:Math.sin(angle)*(force?38:12)-8,life:1,color:palette[k%3]});
+          }
+          if (sparks.length>32) sparks.splice(0,sparks.length-32);
+        }
+        return {
+          disturb:disturb,
+          scroll:function(y){targetScroll=y*.025;},
+          frame:function(dt){
+            elapsed+=dt;
+            offset.x+=((mouse.active?(mouse.x-w/2)*.018:0)-offset.x)*Math.min(1,dt*3);
+            offset.y+=((mouse.active?(mouse.y-h/2)*.018:0)-offset.y)*Math.min(1,dt*3);
+            scroll+=(targetScroll-scroll)*Math.min(1,dt*3);
+            ctx.fillStyle=dark?'#0b1024':'#f2f2fc'; ctx.fillRect(0,0,w,h);
+            clouds.forEach(function(g){ctx.fillStyle=g;ctx.fillRect(0,0,w,h);});
+            stars.forEach(function(s){
+              var twinkle=.58+.42*Math.sin(s.phase+elapsed*s.speed);
+              var y=((s.y+offset.y*s.depth-scroll*s.depth)%h+h)%h;
+              star(s.x+offset.x*s.depth,y,s.r,s.color,(dark?.35:.24)+twinkle*(dark?.58:.35),s.bright);
+            });
+            for(var j=sparks.length-1;j>=0;j--){
+              var p=sparks[j]; p.life-=dt*.85;
+              if(p.life<=0){sparks.splice(j,1);continue;}
+              p.x+=p.vx*dt;p.y+=p.vy*dt;
+              star(p.x,p.y,.7+p.life,p.color,p.life*.85,true);
+            }
+            if(elapsed>nextMeteor){
+              meteors.push({x:w*(.25+rnd()*.7),y:h*(.05+rnd()*.3),life:1});
+              if(meteors.length>2) meteors.shift();
+              nextMeteor=elapsed+4+rnd()*5;
+            }
+            for(var m=meteors.length-1;m>=0;m--){
+              var meteor=meteors[m];meteor.life-=dt*.55;
+              if(meteor.life<=0){meteors.splice(m,1);continue;}
+              meteor.x-=dt*210;meteor.y+=dt*115;
+              var tail=ctx.createLinearGradient(meteor.x,meteor.y,meteor.x+95,meteor.y-52);
+              tail.addColorStop(0,'rgba('+palette[0]+','+meteor.life*.8+')');
+              tail.addColorStop(1,'rgba('+palette[0]+',0)');
+              ctx.strokeStyle=tail;ctx.lineWidth=1.5;
+              ctx.beginPath();ctx.moveTo(meteor.x,meteor.y);ctx.lineTo(meteor.x+95,meteor.y-52);ctx.stroke();
+              star(meteor.x,meteor.y,1.3,palette[0],meteor.life,false);
+            }
+          }
+        };
+      }
+    },
+
+    water: {
+      meta: { id: 'water', name: '流动水面', desc: '水光缓慢流动，鼠标划过或手指滑动泛起涟漪，滚动带来轻微视差' },
+      init: function (w, h, rnd) {
+        if (!global.ResumeWater) return EFFECTS.waves.init(w, h, rnd);
+        return global.ResumeWater.create(ctx, w, h, density,
+          document.documentElement.getAttribute('data-theme') === 'dark');
+      }
+    },
 
     /* ---------------------------------------------- 1. 粒子连线（默认款） */
     network: {
@@ -394,7 +506,7 @@
   };
 
   /* 元数据列表，顺序即设置页里的显示顺序 */
-  var EFFECT_LIST = ['network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
+  var EFFECT_LIST = ['water', 'starlight', 'ink', 'clouds', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
     return EFFECTS[id].meta;
   });
 
@@ -410,23 +522,35 @@
   }
 
   function build() {
-    var eff = EFFECTS[currentId] || EFFECTS.network;
+    document.documentElement.setAttribute('data-background', currentId);
+    var eff = EFFECTS[currentId] || EFFECTS.water;
     var rnd = makeRnd((Math.round(W) * 73856093) ^ (Math.round(H) * 19349663));
     current = eff.init(W, H, rnd);
-    if (reduceMotion && current) current.frame(1 / 60, W, H);   /* 静态画一帧 */
+    if (current.scroll) current.scroll(global.scrollY || 0);
+    current.frame(0, W, H);   /* 立即绘制；减少动态效果时保留这一帧 */
   }
 
   var lastTs = 0;
   function loop(ts) {
+    rafId = null;
+    if (paused || printing || reduceMotion || currentId === 'off' || !current) return;
     rafId = global.requestAnimationFrame(loop);
-    if (paused || !current) { lastTs = ts; return; }
+    if ((currentId === 'water' || currentId === 'starlight' || currentId === 'ink' || currentId === 'clouds') && lastTs && ts - lastTs < 32) return;
     var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 1 / 60;  /* 夹住，避免切回标签页时跳帧 */
     lastTs = ts;
     if (!reduceMotion) current.frame(dt, W, H);
   }
 
   function start() {
-    if (!rafId) rafId = global.requestAnimationFrame(loop);
+    if (!rafId && !paused && !printing && !reduceMotion && currentId !== 'off') {
+      lastTs = 0;
+      rafId = global.requestAnimationFrame(loop);
+    }
+  }
+
+  function stop() {
+    if (rafId) global.cancelAnimationFrame(rafId);
+    rafId = null;
   }
 
   function setEffect(id) {
@@ -434,6 +558,7 @@
     currentId = id;
     canvas.style.display = (id === 'off') ? 'none' : '';
     build();
+    if (id === 'off') stop(); else start();
     return true;
   }
 
@@ -450,10 +575,24 @@
     resizeTimer = setTimeout(resize, 160);
   }, { passive: true });
 
-  global.addEventListener('pointermove', function (e) {
+  function interact(e, force) {
+    if (reduceMotion || paused || printing) return;
+    if (e.target && e.target.closest && e.target.closest('.drawer, .fab-wrap, button, input, textarea, select, a')) return;
     mouse.x = e.clientX;
     mouse.y = e.clientY;
     mouse.active = true;
+    if (current && current.disturb) current.disturb(e.clientX, e.clientY, force);
+  }
+  global.addEventListener('pointermove', function (e) { interact(e, false); }, { passive: true });
+  global.addEventListener('pointerdown', function (e) { interact(e, true); }, { passive: true });
+  global.addEventListener('touchmove', function (e) {
+    if (e.touches && e.touches[0]) {
+      var touch = e.touches[0];
+      interact({ clientX: touch.clientX, clientY: touch.clientY, target: e.target }, false);
+    }
+  }, { passive: true });
+  global.addEventListener('scroll', function () {
+    if (!reduceMotion && current && current.scroll) current.scroll(global.scrollY || 0);
   }, { passive: true });
 
   global.addEventListener('pointerleave', function () { mouse.active = false; }, { passive: true });
@@ -461,8 +600,18 @@
   /* 标签页不可见时停掉绘制，省电 */
   document.addEventListener('visibilitychange', function () {
     paused = document.hidden;
-    if (!paused && current) current.frame(1 / 60, W, H);
+    if (paused) stop(); else start();
   });
+
+  if (global.matchMedia) {
+    var motionQuery = global.matchMedia('(prefers-reduced-motion: reduce)');
+    var motionChanged = function (e) {
+      reduceMotion = e.matches;
+      if (reduceMotion) { stop(); build(); } else start();
+    };
+    if (motionQuery.addEventListener) motionQuery.addEventListener('change', motionChanged);
+    else if (motionQuery.addListener) motionQuery.addListener(motionChanged);
+  }
 
   /* 主题切换后重新取色并重建（部分特效的颜色在 init 时就固化了） */
   if (global.MutationObserver) {
@@ -474,13 +623,16 @@
 
   /* 打印时隐藏背景，别把粒子印进 PDF */
   global.addEventListener('beforeprint', function () {
-    paused = true;
+    printing = true;
+    stop();
     canvas.style.display = 'none';
   });
   global.addEventListener('afterprint', function () {
     paused = document.hidden;
+    printing = false;
     canvas.style.display = (currentId === 'off') ? 'none' : '';
     resize();
+    start();
   });
 
   /* ================================================================ 启动 */
@@ -496,6 +648,6 @@
     setDensity: setDensity,
     getDensity: function () { return density; },
     redraw: function () { colors = themeColors(); resize(); },
-    stop: function () { if (rafId) global.cancelAnimationFrame(rafId); rafId = null; }
+    stop: stop
   };
 })(typeof window !== 'undefined' ? window : globalThis);

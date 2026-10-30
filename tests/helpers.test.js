@@ -341,21 +341,21 @@ console.log('\n-- Hero 中轴对齐 --');
   const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
   const printCss = fs.readFileSync(path.join(ROOT, 'print.css'), 'utf8');
 
-  /* 7.1 #hero 靠 flex + align-items:center 居中一切 */
-  const hero = /#hero\s*\{[^}]*\}/.exec(css);
-  ok(!!hero, '7.1 应能找到 #hero 规则');
+  /* 7.1 \.resume-hero 靠 flex + align-items:center 居中一切 */
+  const hero = /\.resume-hero\s*\{[^}]*\}/.exec(css);
+  ok(!!hero, '7.1 应能找到 \.resume-hero 规则');
   if (hero) {
-    ok(/display:\s*flex/.test(hero[0]), '7.2 #hero 应是 flex 容器');
-    ok(/flex-direction:\s*column/.test(hero[0]), '7.3 #hero 应是纵向排列');
-    ok(/align-items:\s*center/.test(hero[0]), '7.4 #hero 应横向居中子元素');
+    ok(/display:\s*flex/.test(hero[0]), '7.2 \.resume-hero 应是 flex 容器');
+    ok(/flex-direction:\s*column/.test(hero[0]), '7.3 \.resume-hero 应是纵向排列');
+    ok(/align-items:\s*center/.test(hero[0]), '7.4 \.resume-hero 应横向居中子元素');
   }
 
   /* 7.5 关键：.hero-top 必须显式设成居中 flex。
      它只被 print.css 设过样式时，屏幕上会是 display:block ——
      作为 flex column 的子元素被撑到满宽，里面宽度由内容决定的 .avatar-ring
      就会被甩到左边，表现成「头像相对下面的姓名偏左」。 */
-  const top = /#hero\s+\.hero-top\s*\{[^}]*\}/.exec(css);
-  ok(!!top, '7.5 style.css 里必须给 #hero .hero-top 写样式（不能只靠 print.css）');
+  const top = /\.resume-hero\s+\.hero-top\s*\{[^}]*\}/.exec(css);
+  ok(!!top, '7.5 style.css 里必须给 \.resume-hero .hero-top 写样式（不能只靠 print.css）');
   if (top) {
     ok(/display:\s*flex/.test(top[0]), '7.6 .hero-top 应是 flex 容器');
     ok(/flex-direction:\s*column/.test(top[0]), '7.7 屏幕上 .hero-top 应纵向排列');
@@ -363,7 +363,7 @@ console.log('\n-- Hero 中轴对齐 --');
   }
 
   /* 7.9 打印时反过来要横排 */
-  const ptop = /#hero\s+\.hero-top\s*\{[^}]*\}/.exec(printCss);
+  const ptop = /\.resume-hero\s+\.hero-top\s*\{[^}]*\}/.exec(printCss);
   ok(!!ptop, '7.9 print.css 里应保留 .hero-top 规则');
   if (ptop) {
     ok(/display:\s*flex\s*!important/.test(ptop[0]) || /display:\s*flex/.test(ptop[0]),
