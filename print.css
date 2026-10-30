@@ -117,10 +117,13 @@
   .avatar-fallback { border-radius: 4pt !important; border: 1px solid #DDDDDD; }
 
   .resume-hero .name {
+    color: #111111 !important;
     font-size: 22pt !important;
     margin: 0 !important;
     line-height: 1.2 !important;
   }
+
+  .resume-hero .name .last-name { color: #111111 !important; }
 
   .resume-hero .headline { font-size: 10pt !important; margin: 3pt 0 0 !important; }
 
