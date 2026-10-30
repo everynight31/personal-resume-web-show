@@ -91,6 +91,14 @@
 
   var EFFECTS = {
 
+    ink: {
+      meta: { id:'ink',name:'水墨晕染',desc:'宣纸与淡墨缓慢洇开，点击落墨、滑动留下柔和墨痕，文字同步切换墨青配色' },
+      init:function(w,h,rnd){
+        if(!global.ResumeInk)return EFFECTS.waves.init(w,h,rnd);
+        return global.ResumeInk.create(ctx,w,h,density,document.documentElement.getAttribute('data-theme')==='dark',rnd);
+      }
+    },
+
     /* 星光漫游：保留原星空选项，另加有星云、星芒和交互拖尾的背景。 */
     starlight: {
       meta: { id: 'starlight', name: '星光漫游', desc: '星云与星芒缓慢闪烁，划过留下星尘，点击绽放星光，偶尔有流星经过' },
@@ -490,7 +498,7 @@
   };
 
   /* 元数据列表，顺序即设置页里的显示顺序 */
-  var EFFECT_LIST = ['water', 'starlight', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
+  var EFFECT_LIST = ['water', 'starlight', 'ink', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
     return EFFECTS[id].meta;
   });
 
@@ -519,7 +527,7 @@
     rafId = null;
     if (paused || printing || reduceMotion || currentId === 'off' || !current) return;
     rafId = global.requestAnimationFrame(loop);
-    if ((currentId === 'water' || currentId === 'starlight') && lastTs && ts - lastTs < 32) return;
+    if ((currentId === 'water' || currentId === 'starlight' || currentId === 'ink') && lastTs && ts - lastTs < 32) return;
     var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 1 / 60;  /* 夹住，避免切回标签页时跳帧 */
     lastTs = ts;
     if (!reduceMotion) current.frame(dt, W, H);
