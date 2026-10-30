@@ -1549,6 +1549,11 @@ html[data-theme="dark"] .field-warn { color: #FF7A72; }
 .effect-thumb.t-starlight i:nth-child(n+4) { display: none; }
 .effect-thumb.t-ink { background: radial-gradient(ellipse at 20% 75%,rgba(42,66,61,.62),transparent 64%),radial-gradient(ellipse at 90% 20%,rgba(60,71,63,.32),transparent 55%),#f4f1e8; }
 .effect-thumb.t-ink i { display: none; }
+.effect-thumb.t-clouds { background: linear-gradient(#b9d5e7,#f8eddf); }
+.effect-thumb.t-clouds i { height:12px;width:32px;border-radius:50%;background:rgba(255,255,255,.85);filter:blur(2px);left:2px;top:15px; }
+.effect-thumb.t-clouds i:nth-child(2) { left:14px;top:23px; }
+.effect-thumb.t-clouds i:nth-child(3) { left:0;top:29px;width:48px; }
+.effect-thumb.t-clouds i:nth-child(n+4) { display:none; }
 html[data-theme="dark"] .resume-hero .intent,
 html[data-theme="dark"] .resume-hero .name .last-name,
 html[data-theme="dark"] .resume-hero .contact-item svg { color: #67c8ff; }
@@ -2036,4 +2041,49 @@ html[data-theme="dark"] .toast { background: rgba(245, 245, 247, 0.95); color: #
 @media screen and (prefers-reduced-motion: no-preference) {
   html[data-background="ink"] #resume-root .name { animation:ink-type-settle 1.4s ease-out both; }
   @keyframes ink-type-settle { from { opacity:.5;transform:translateY(3px); } to { opacity:1;transform:none; } }
+}
+
+/* 云海晨雾：雾蓝、银灰与柔和的高光边缘。 */
+@media screen {
+  html[data-background="clouds"] #resume-root {
+    --primary:#426c86;
+    --primary-rgb:66,108,134;
+    --text:#30485b;
+    --text-strong:#243e54;
+    --text-soft:#40596b;
+    --text-muted:#506a7b;
+    --bg:#e6edf1;
+    --cloud-surface:rgba(248,251,253,.92);
+    color:var(--text);
+  }
+  html[data-background="clouds"][data-theme="dark"] #resume-root {
+    --primary:#bad7e7;
+    --primary-rgb:186,215,231;
+    --text:#dce8ef;
+    --text-strong:#f0f5f8;
+    --text-soft:#cbdde7;
+    --text-muted:#b7cdda;
+    --bg:#1b3042;
+    --cloud-surface:rgba(27,46,62,.95);
+  }
+  html[data-background="clouds"] #resume-root .name {
+    padding:.10em .12em .12em;
+    letter-spacing:.08em;
+    color:var(--text-strong);
+    text-shadow:0 2px 22px rgba(242,250,255,.35);
+  }
+  html[data-background="clouds"] #resume-root .name .last-name { color:inherit; }
+  html[data-background="clouds"] #resume-root .headline { font-family:var(--font-sans);letter-spacing:.05em;line-height:1.85; }
+  html[data-background="clouds"] #resume-root .intent { color:var(--primary);font-weight:600;background:var(--cloud-surface);border-color:rgba(var(--primary-rgb),.25);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 8px 28px rgba(66,108,134,.08); }
+  html[data-background="clouds"] #resume-root .contact-item svg { color:var(--primary); }
+  html[data-background="clouds"] #resume-root .section-title { letter-spacing:.07em; }
+  html[data-background="clouds"] #resume-root .section-title::after { width:76px;background:linear-gradient(90deg,var(--primary),rgba(var(--primary-rgb),.06));border-radius:50%; }
+  html[data-background="clouds"] #resume-root .card,
+  html[data-background="clouds"] #resume-root .timeline-content { background:var(--cloud-surface);border-color:rgba(var(--primary-rgb),.20);box-shadow:0 8px 28px rgba(46,75,94,.08); }
+  html[data-background="clouds"][data-theme="dark"] #resume-root .btn.primary,
+  html[data-background="clouds"][data-theme="dark"] #resume-root .skill-tag.main-skill { color:#f5fbff;background:#3b5d73;border-color:#789bad; }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-background="clouds"] #resume-root .name { animation:water-type-drift 14s ease-in-out infinite;--water-type-rise:-3px; }
+  html[data-background="clouds"] #resume-root .intent { animation:water-type-drift 16s ease-in-out -5s infinite;--water-type-rise:-2px; }
 }
