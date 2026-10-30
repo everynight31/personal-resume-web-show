@@ -19,6 +19,8 @@
   .drawer,
   .toast,
   .section-nav,
+  .hero-actions,
+  .skip-link,
   #btn-parse, #btn-apply, #btn-undo, #btn-discard,
   .link-btn, .pane-head-actions {
     display: none !important;
@@ -53,6 +55,7 @@
   }
 
   html, body {
+    overflow: visible !important;
     height: auto !important;
     min-height: 0 !important;
     background: #FFFFFF !important;
@@ -74,7 +77,7 @@
   a { color: #111111 !important; text-decoration: none !important; }
 
   /* ---------------------------------------------------- 3. Hero 压缩 */
-  #hero {
+  .resume-hero {
     min-height: 0 !important;
     padding: 0 0 8pt !important;
     margin: 0 0 4pt !important;
@@ -85,7 +88,7 @@
   }
 
   /* 打印时头像与姓名并排，省掉一整页空白 */
-  #hero .hero-top {
+  .resume-hero .hero-top {
     display: flex !important;
     align-items: center !important;
     gap: 12pt !important;
@@ -113,15 +116,15 @@
 
   .avatar-fallback { border-radius: 4pt !important; border: 1px solid #DDDDDD; }
 
-  #hero .name {
+  .resume-hero .name {
     font-size: 22pt !important;
     margin: 0 !important;
     line-height: 1.2 !important;
   }
 
-  #hero .headline { font-size: 10pt !important; margin: 3pt 0 0 !important; }
+  .resume-hero .headline { font-size: 10pt !important; margin: 3pt 0 0 !important; }
 
-  #hero .intent {
+  .resume-hero .intent {
     font-size: 9.5pt !important;
     margin: 5pt 0 0 !important;
     padding: 2pt 8pt !important;
@@ -132,15 +135,15 @@
     color: #111111 !important;
   }
 
-  #hero .contact-info {
+  .resume-hero .contact-info {
     margin: 6pt 0 0 !important;
     justify-content: flex-start !important;
     gap: 4pt 14pt !important;
     font-size: 9.5pt !important;
   }
 
-  #hero .contact-info .contact-item { color: #222222 !important; }
-  #hero .contact-info .contact-item svg { display: none !important; }
+  .resume-hero .contact-info .contact-item { color: #222222 !important; }
+  .resume-hero .contact-info .contact-item svg { display: none !important; }
 
   /* ---------------------------------------------------- 4. 成绩条 */
   .scores {
