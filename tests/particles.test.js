@@ -15,7 +15,7 @@ const canvas = { style: {}, clientWidth: 800, clientHeight: 600, getContext: () 
 const doc = {
   hidden: false,
   getElementById: () => canvas,
-  documentElement: { getAttribute: () => 'light' },
+  documentElement: { getAttribute: () => 'light', setAttribute(name, value) { this[name] = value; } },
   addEventListener: (name, fn) => { docEvents[name] = fn; }
 };
 const env = {
@@ -35,6 +35,7 @@ env.window = env;
 vm.runInNewContext(fs.readFileSync(path.join(ROOT,'js/particles.js'),'utf8'), env);
 const P = env.ResumeParticles;
 check(P.getEffect() === 'water', '首次使用应显示流动水面');
+check(doc.documentElement['data-background'] === 'water', '文字主题与当前水面效果同步');
 check(queue.size === 1, '启动只申请一条动画链');
 events.pointermove({clientX: 120, clientY: 80});
 check(calls.some(c => c[0] === 'ripple' && c[1] === 120), '鼠标移动传递到水面');
@@ -47,6 +48,7 @@ env.scrollY = 450; events.scroll();
 check(calls.some(c => c[0] === 'scroll' && c[1] === 450), '滚动位置传递到水面');
 P.setEffect('off');
 check(queue.size === 0 && canvas.style.display === 'none', '关闭背景应停止调度并隐藏画布');
+check(doc.documentElement['data-background'] === 'off', '关闭水面后同时移除水感文字主题');
 P.setEffect('water');
 check(queue.size === 1, '重新启用应恢复且不重复调度');
 doc.hidden = true; docEvents.visibilitychange();
