@@ -1541,6 +1541,12 @@ html[data-theme="dark"] .field-warn { color: #FF7A72; }
 .effect-thumb.t-water i { background: none; border: 1px solid rgba(255,255,255,.8); border-radius: 50%; width: 34px; height: 20px; left: 5px; top: 11px; transform: rotate(-25deg); }
 .effect-thumb.t-water i:nth-child(2) { width: 22px; height: 12px; left: 11px; top: 15px; }
 .effect-thumb.t-water i:nth-child(n+3) { display: none; }
+.effect-thumb.t-starlight { background: radial-gradient(ellipse at 20% 25%, #57418c, #11172f 75%); }
+.effect-thumb.t-starlight i { background: #d6dfff; width: 3px; height: 3px; border-radius: 50%; box-shadow: 0 0 5px #ccc3ff; }
+.effect-thumb.t-starlight i:nth-child(1) { left: 10px; top: 10px; }
+.effect-thumb.t-starlight i:nth-child(2) { left: 26px; top: 23px; width: 4px; height: 4px; }
+.effect-thumb.t-starlight i:nth-child(3) { left: 12px; top: 30px; width: 2px; height: 2px; }
+.effect-thumb.t-starlight i:nth-child(n+4) { display: none; }
 html[data-theme="dark"] .resume-hero .intent,
 html[data-theme="dark"] .resume-hero .name .last-name,
 html[data-theme="dark"] .resume-hero .contact-item svg { color: #67c8ff; }
@@ -1905,5 +1911,66 @@ html[data-theme="dark"] .toast { background: rgba(245, 245, 247, 0.95); color: #
   @keyframes water-type-shine {
     0%, 100% { background-position: 20% 50%; }
     50% { background-position: 85% 50%; }
+  }
+}
+
+/* 星光主题与水面独立切换，只有主简历使用星辉配色。 */
+@media screen {
+  html[data-background="starlight"] #resume-root {
+    --primary: #625095;
+    --primary-rgb: 98, 80, 149;
+    --text: #33364e;
+    --text-strong: #303450;
+    --text-soft: #44455e;
+    --text-muted: #555c78;
+    --star-name-a: #3d4e87;
+    --star-name-b: #77568f;
+    --star-glow: rgba(118, 102, 175, .16);
+    color: var(--text);
+  }
+  html[data-background="starlight"][data-theme="dark"] #resume-root {
+    --primary: #d2c3ff;
+    --primary-rgb: 210, 195, 255;
+    --text: #e1e6f7;
+    --text-strong: #f0efff;
+    --text-soft: #ced5ee;
+    --text-muted: #bdc5e2;
+    --star-name-a: #e2e9ff;
+    --star-name-b: #ead3a8;
+    --star-glow: rgba(183, 156, 255, .27);
+  }
+  html[data-background="starlight"] #resume-root .name {
+    color: var(--text-strong);
+    padding: .08em .1em .14em;
+    letter-spacing: .08em;
+    text-shadow: 0 0 22px var(--star-glow);
+  }
+  html[data-background="starlight"] #resume-root .name .last-name { color: inherit; }
+  @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+    html[data-background="starlight"] #resume-root .name {
+      background: linear-gradient(110deg,var(--star-name-a),var(--star-name-b) 55%,var(--star-name-a));
+      background-size: 200% 100%;
+      background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      text-shadow: none; filter: drop-shadow(0 0 12px var(--star-glow));
+    }
+  }
+  html[data-background="starlight"] #resume-root .headline { font-family: var(--font-sans); letter-spacing: .05em; }
+  html[data-background="starlight"] #resume-root .intent { color: var(--primary); font-weight: 600; border-color: rgba(var(--primary-rgb),.3); background: rgba(247,245,255,.8); }
+  html[data-background="starlight"] #resume-root .contact-item svg { color: var(--primary); }
+  html[data-background="starlight"] #resume-root .section-title { letter-spacing: .08em; text-shadow: 0 0 20px var(--star-glow); }
+  html[data-background="starlight"] #resume-root .section-title::after { background: linear-gradient(90deg,var(--primary),transparent); width: 76px; }
+  html[data-background="starlight"][data-theme="dark"] #resume-root .card,
+  html[data-background="starlight"][data-theme="dark"] #resume-root .timeline-content { background: rgba(19,24,48,.94); border-color: rgba(190,177,240,.23); }
+  html[data-background="starlight"][data-theme="dark"] #resume-root .intent,
+  html[data-background="starlight"][data-theme="dark"] #resume-root .skill-tag { color: #e0d8ff; background: rgba(53,43,88,.72); border-color: rgba(190,177,240,.3); }
+  html[data-background="starlight"][data-theme="dark"] #resume-root .btn.primary,
+  html[data-background="starlight"][data-theme="dark"] #resume-root .skill-tag.main-skill { color: #f8f5ff; background: #534478; border-color: #8e7bae; }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-background="starlight"] #resume-root .name { animation: water-type-drift 12s ease-in-out infinite, water-type-shine 18s ease-in-out infinite; --water-type-rise: -3px; }
+  html[data-background="starlight"] #resume-root .section-title { animation: star-type-glow 7s ease-in-out infinite; }
+  @keyframes star-type-glow {
+    0%,100% { text-shadow: 0 0 8px var(--star-glow); }
+    50% { text-shadow: 0 0 24px var(--star-glow); }
   }
 }
