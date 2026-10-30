@@ -10,7 +10,9 @@ function check(value, message) { assert.ok(value, message); checks++; }
 /* 用可控的动画时钟验证停播/恢复，避免后台和关闭效果仍持续申请帧。 */
 const events = {}, docEvents = {}, queue = new Map(), calls = [];
 let motionChange, nextFrame = 0;
-const ctx = { clearRect() {}, setTransform() {} };
+let starArcs = 0;
+const gradient = () => ({ addColorStop() {} });
+const ctx = { clearRect() {}, setTransform() {}, fillRect() {}, beginPath() {}, fill() {}, stroke() {}, moveTo() {}, lineTo() {}, arc() { starArcs++; }, createRadialGradient:gradient, createLinearGradient:gradient };
 const canvas = { style: {}, clientWidth: 800, clientHeight: 600, getContext: () => ctx };
 const doc = {
   hidden: false,
@@ -69,6 +71,26 @@ check(queue.size === 0, '打印期间 visibilitychange 不能重启动画');
 events.afterprint();
 check(queue.size === 1, '打印结束恢复单条动画链');
 check(!P.setEffect('unknown') && P.getEffect() === 'water', '无效效果不能破坏当前效果');
+
+/* 星光是独立选项，交互星尘应有数量上限并及时消退。 */
+check(P.EFFECTS.some(e => e.id === 'starlight') && P.EFFECTS.some(e => e.id === 'starfield'), '新增星光选项并保留旧星空');
+starArcs = 0;
+P.setEffect('starlight');
+const baseStars = starArcs;
+check(baseStars > 0 && doc.documentElement['data-background'] === 'starlight', '星光立即绘制并同步文字主题');
+for (let i=0;i<50;i++) events.pointerdown({ clientX:200, clientY:150 });
+function frame(ts) {
+  const [id, fn] = queue.entries().next().value;
+  queue.delete(id); starArcs = 0; fn(ts);
+}
+frame(1000);
+check(starArcs <= baseStars + 32, '连续点击的星尘最多保留32颗');
+for(let i=1;i<=35;i++) frame(1000+i*50);
+check(starArcs === baseStars, '交互星尘会自然消退');
+motionChange({matches:true});
+check(queue.size === 0 && starArcs > 0, '减少动态效果时星光保留静态画面');
+P.setEffect('water'); motionChange({matches:false});
+check(P.getEffect() === 'water' && queue.size === 1, '星光与水面可以切换且不重复调度');
 
 /* 没有 GPU 时仍能绘制，并且交互波纹最终消退。 */
 let arcs = 0, fills = 0;
