@@ -31,6 +31,10 @@ const env = {
     frame: dt => calls.push(['frame',dt]),
     disturb: (...args) => calls.push(['ripple',...args]),
     scroll: y => calls.push(['scroll',y])
+  }) },
+  ResumePetals: { create: () => ({
+    frame: dt => calls.push(['petals',dt]),
+    disturb: (...args) => calls.push(['wind',...args])
   }) }
 };
 env.window = env;
@@ -91,6 +95,18 @@ motionChange({matches:true});
 check(queue.size === 0 && starArcs > 0, '减少动态效果时星光保留静态画面');
 P.setEffect('water'); motionChange({matches:false});
 check(P.getEffect() === 'water' && queue.size === 1, '星光与水面可以切换且不重复调度');
+
+check(P.EFFECTS.length === 11 && P.EFFECTS.some(e => e.id === 'petals'), '花瓣加入设置列表，共11个背景选项');
+P.setEffect('petals');
+check(doc.documentElement['data-background'] === 'petals', '花瓣与文字主题同步');
+events.touchmove({touches:[{clientX:180,clientY:220}]});
+check(calls.some(c => c[0] === 'wind' && c[1] === 180), '手指滑动向花瓣传递阵风');
+motionChange({matches:true});
+check(queue.size === 0, '减少动态效果时花瓣不申请动画帧');
+const windCalls = calls.length;
+events.pointerdown({clientX:200,clientY:100});
+check(calls.length === windCalls, '减少动态效果时不触发花瓣阵风');
+P.setEffect('water'); motionChange({matches:false});
 
 /* 没有 GPU 时仍能绘制，并且交互波纹最终消退。 */
 let arcs = 0, fills = 0;
@@ -168,5 +184,50 @@ check(arcs === 0, '忽略无效输入坐标');
   const plain=cloudEnv.ResumeClouds.create(screen,390,844,1,false,()=>.5);
   check(typeof plain.frame==='function','云纹理不可用时提供纯色回退');
   plain.frame(0);
+}
+/* 花瓣纹理缓存、交互风力、长期循环、移动端数量与无画布回退。 */
+{
+  let created = 0;
+  const g = () => ({addColorStop(){}});
+  const brush = {createLinearGradient:g,beginPath(){},moveTo(){},bezierCurveTo(){},closePath(){},fill(){},stroke(){}};
+  const draws = [], positions = [];
+  let position;
+  const screen = {createLinearGradient:g,createRadialGradient:g,fillRect(){},save(){},restore(){},
+    translate(x,y){position=[x,y];positions.push(position);},rotate(){},scale(){},drawImage(...args){draws.push(args);}};
+  const petalEnv = {Math,Number,isFinite,document:{createElement(){created++;return {getContext:()=>brush};}}};
+  petalEnv.window = petalEnv;
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT,'js/petals.js'),'utf8'),petalEnv);
+  const makePetals = (width=800,height=600,density=1,dark=false) => petalEnv.ResumePetals.create(screen,width,height,density,dark,()=>.25);
+  const petals = makePetals();
+  petals.frame(0);
+  const total = draws.length;
+  check(created===3 && total>=18 && total<=100, '花瓣缓存三种纹理，静态首帧可见');
+  const start = positions[0].slice();draws.length=0;positions.length=0;
+  petals.frame(.05);
+  check(positions[0][1]>start[1] && positions[0][0]!==start[0], '花瓣同时飘落与随风横移');
+  const calm = makePetals(), windy = makePetals();
+  calm.frame(.05);const calmX=positions[positions.length-total][0];
+  windy.disturb(0,150,true);windy.frame(.05);const windX=positions[positions.length-total][0];
+  check(windX>calmX, '点击可以扬起花瓣并产生阵风');
+  const scrolled=makePetals();scrolled.scroll(0);scrolled.scroll(100);scrolled.frame(.05);
+  check(positions[positions.length-total][0]>calmX, '滚动产生短暂阵风');
+  const cached=created;
+  for(let i=0;i<2000;i++) {
+    draws.length=0;positions.length=0;
+    if(i%10===0) petals.disturb(i%800,300,true);
+    petals.frame(.05);
+    assert.equal(draws.length,total);
+    assert.ok(positions.every(([x,y])=>Number.isFinite(x)&&Number.isFinite(y)&&x>=-40&&x<=840&&y>=-40&&y<=640));
+  }
+  check(created===cached, '长时间交互不会增加花瓣数量、重建纹理或越过回收边界');
+  petals.disturb(NaN,Infinity,true);petals.scroll(NaN);positions.length=0;petals.frame(.05);
+  check(positions.every(p=>p.every(Number.isFinite)), '无效坐标不会破坏花瓣绘制');
+  const dense=makePetals(1600,1000,99,true);draws.length=0;dense.frame(0);
+  check(draws.length===100, '极高强度仍最多100片花瓣');
+  const mobile=makePetals(390,844,.4);draws.length=0;mobile.frame(0);
+  check(draws.length===18, '手机低强度使用轻量花瓣数量');
+  petalEnv.document.createElement=()=>({getContext:()=>null});
+  const plain=makePetals();draws.length=0;plain.frame(0);
+  check(draws.length===0 && typeof plain.frame==='function', '纹理画布不可用时使用纯色渐变回退');
 }
 console.log('通过 ' + checks + ' 项，失败 0 项');

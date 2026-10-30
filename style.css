@@ -1554,6 +1554,12 @@ html[data-theme="dark"] .field-warn { color: #FF7A72; }
 .effect-thumb.t-clouds i:nth-child(2) { left:14px;top:23px; }
 .effect-thumb.t-clouds i:nth-child(3) { left:0;top:29px;width:48px; }
 .effect-thumb.t-clouds i:nth-child(n+4) { display:none; }
+.effect-thumb.t-petals { background:linear-gradient(135deg,#fff3df,#f0ccd9); }
+.effect-thumb.t-petals i { width:9px;height:13px;border-radius:65% 40% 70% 15%;background:linear-gradient(135deg,#fff0f2,#bd6089);transform:rotate(-35deg); }
+.effect-thumb.t-petals i:nth-child(1) { left:8px;top:7px; }
+.effect-thumb.t-petals i:nth-child(2) { left:25px;top:16px;transform:rotate(35deg); }
+.effect-thumb.t-petals i:nth-child(3) { left:11px;top:28px;width:6px;height:9px; }
+.effect-thumb.t-petals i:nth-child(n+4) { display:none; }
 html[data-theme="dark"] .resume-hero .intent,
 html[data-theme="dark"] .resume-hero .name .last-name,
 html[data-theme="dark"] .resume-hero .contact-item svg { color: #67c8ff; }
@@ -2086,4 +2092,61 @@ html[data-theme="dark"] .toast { background: rgba(245, 245, 247, 0.95); color: #
 @media screen and (prefers-reduced-motion: no-preference) {
   html[data-background="clouds"] #resume-root .name { animation:water-type-drift 14s ease-in-out infinite;--water-type-rise:-3px; }
   html[data-background="clouds"] #resume-root .intent { animation:water-type-drift 16s ease-in-out -5s infinite;--water-type-rise:-2px; }
+}
+
+/* 风吹花瓣：樱粉、暖纸与夜樱。配色只作用于主简历，正文不浮动。 */
+@media screen {
+  html[data-background="petals"] #resume-root {
+    --primary:#9a4164;
+    --primary-rgb:154,65,100;
+    --text:#533d49;
+    --text-strong:#603248;
+    --text-soft:#6c4d5b;
+    --text-muted:#795866;
+    --bg:#faeef0;
+    --petal-surface:rgba(255,249,248,.94);
+    color:var(--text);
+  }
+  html[data-background="petals"][data-theme="dark"] #resume-root {
+    --primary:#efb2cd;
+    --primary-rgb:239,178,205;
+    --text:#eadbe4;
+    --text-strong:#fff0f5;
+    --text-soft:#e1c8d6;
+    --text-muted:#cfb3c4;
+    --bg:#2b2031;
+    --petal-surface:rgba(43,32,49,.95);
+  }
+  html[data-background="petals"] #resume-root .name {
+    color:var(--text-strong);letter-spacing:.06em;
+    text-shadow:0 3px 22px rgba(var(--primary-rgb),.16);
+  }
+  html[data-background="petals"] #resume-root .name .last-name { color:var(--primary); }
+  html[data-background="petals"] #resume-root .intent {
+    color:var(--primary);background:var(--petal-surface);
+    border-color:rgba(var(--primary-rgb),.27);font-weight:600;
+  }
+  html[data-background="petals"] #resume-root .contact-item svg { color:var(--primary); }
+  html[data-background="petals"] #resume-root .section-title { letter-spacing:.06em; }
+  html[data-background="petals"] #resume-root .section-title::after {
+    width:70px;background:linear-gradient(90deg,var(--primary),rgba(var(--primary-rgb),.06));
+    border-radius:70% 20% 70% 20%;
+  }
+  html[data-background="petals"] #resume-root .card,
+  html[data-background="petals"] #resume-root .timeline-content {
+    background:var(--petal-surface);border-color:rgba(var(--primary-rgb),.18);
+    box-shadow:0 8px 26px rgba(104,51,75,.07);
+  }
+  html[data-background="petals"][data-theme="dark"] #resume-root .btn.primary,
+  html[data-background="petals"][data-theme="dark"] #resume-root .skill-tag.main-skill {
+    color:#fff0f7;background:#743c59;border-color:#af7496;
+  }
+}
+@keyframes petal-type-sway {
+  0%,100% { transform:translate3d(0,0,0) rotate(-.25deg); }
+  50% { transform:translate3d(2px,-2px,0) rotate(.25deg); }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  html[data-background="petals"] #resume-root .name { animation:petal-type-sway 11s ease-in-out infinite; }
+  html[data-background="petals"] #resume-root .intent { animation:petal-type-sway 14s ease-in-out -4s infinite; }
 }
