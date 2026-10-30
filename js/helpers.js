@@ -152,17 +152,23 @@
     var ex = Array.isArray(existing) ? existing : [];
     var pa = Array.isArray(parsed) ? parsed : [];
 
+    function identity(section) {
+      var key = section.kind || section.id;
+      return key === 'internship' ? 'internships' : key;
+    }
     var out = [], used = [];
     ex.forEach(function (section) {
       if (!section || !section.id) return;
       var match = -1;
       pa.some(function (parsed, index) {
         if (!parsed || used[index]) return false;
-        if (parsed.id === section.id || (parsed.kind && parsed.kind === (section.kind || section.id))) { match=index; return true; }
+        if (parsed.id === section.id || identity(parsed) === identity(section)) { match=index; return true; }
         return false;
       });
       if (match !== -1) used[match]=true;
-      out.push({section:match === -1 ? section : pa[match],fromParse:match !== -1});
+      var merged = section;
+      if (match !== -1) merged = Object.assign({}, pa[match], {id:section.id,anchor:section.anchor || section.id,kind:identity(section)});
+      out.push({section:merged,fromParse:match !== -1});
     });
     pa.forEach(function (section,index) { if (section && section.id && !used[index]) out.push({section:section,fromParse:true}); });
 
