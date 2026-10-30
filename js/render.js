@@ -9,6 +9,10 @@
 (function (global) {
   'use strict';
 
+  function safeHref(value) { return global.ResumeHelpers && typeof global.ResumeHelpers.safeHref === 'function' ? global.ResumeHelpers.safeHref(value) : ''; }
+  function safeImageSrc(value) { return global.ResumeHelpers && typeof global.ResumeHelpers.safeImageSrc === 'function' ? global.ResumeHelpers.safeImageSrc(value) : ''; }
+  var revealCleanup = new WeakMap();
+
   var ICONS = {
     phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h3l1.5 4-2 1.4a12 12 0 0 0 6 6l1.4-2 4 1.5v3A2 2 0 0 1 18.4 20 15.8 15.8 0 0 1 4 5.6a2 2 0 0 1 2.6-2.1z"/></svg>',
     mail: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.4"/><path d="M4 7.5l8 5.4 8-5.4"/></svg>',
@@ -38,7 +42,7 @@
   }
 
   function iconFor(name) {
-    return ICONS[name] || ICONS.spark;
+    return Object.prototype.hasOwnProperty.call(ICONS,name) ? ICONS[name] : ICONS.spark;
   }
 
   /* ------------------------------------------------------------------ Hero */
@@ -52,10 +56,10 @@
 
     var ring = el('div', 'avatar-ring');
     if (!opts.mini) ring.id = 'avatar-anchor';
-    if (p.avatar) {
+    if (safeImageSrc(p.avatar)) {
       var img = document.createElement('img');
       img.className = 'avatar';
-      img.src = p.avatar;
+      img.src = safeImageSrc(p.avatar);
       img.alt = (p.name || '') + ' 证件照';
       img.onerror = function () {
         var fb = el('div', 'avatar-fallback', esc(firstChar(p.name)));
@@ -85,10 +89,11 @@
       var info = el('div', 'contact-info');
       p.contacts.forEach(function (c) {
         var inner = iconFor(c.icon) + '<span>' + esc(c.value || c.label) + '</span>';
-        var node = c.href ? el('a', 'contact-item', inner) : el('span', 'contact-item', inner);
-        if (c.href) {
-          node.href = c.href;
-          if (/^https?:/.test(c.href)) { node.target = '_blank'; node.rel = 'noopener noreferrer'; }
+        var href = safeHref(c.href);
+        var node = href ? el('a', 'contact-item', inner) : el('span', 'contact-item', inner);
+        if (href) {
+          node.href = href;
+          if (/^https?:/i.test(href)) { node.target = '_blank'; node.rel = 'noopener noreferrer'; }
         }
         if (c.label) node.title = c.label;
         info.appendChild(node);
@@ -165,8 +170,8 @@
       var item = el('div', 'timeline-item');
 
       var icon = el('div', 'timeline-icon');
-      if (it.logo) {
-        icon.innerHTML = '<img src="' + esc(it.logo) + '" alt="">';
+      if (safeImageSrc(it.logo)) {
+        icon.innerHTML = '<img src="' + esc(safeImageSrc(it.logo)) + '" alt="">';
       } else {
         icon.innerHTML = ICONS.cap;
       }
@@ -198,7 +203,7 @@
 
       var header = el('header', 'card-header');
       var ci = el('div', 'card-icon');
-      if (it.logo) ci.innerHTML = '<img src="' + esc(it.logo) + '" alt="">';
+      if (safeImageSrc(it.logo)) ci.innerHTML = '<img src="' + esc(safeImageSrc(it.logo)) + '" alt="">';
       else ci.textContent = firstChar(it.org);
       header.appendChild(ci);
 
@@ -257,6 +262,7 @@
 
   function renderInto(root, data, opts) {
     opts = opts || {};
+    if (revealCleanup.has(root)) revealCleanup.get(root)();
     root.innerHTML = '';
 
     if (!data || !data.profile) {
@@ -278,7 +284,7 @@
 
     sections.forEach(function (s) {
       var sec = el('section', 'resume-section');
-      if (!opts.mini) sec.id = s.anchor || s.id || '';
+      if (!opts.mini) { sec.id = s.anchor || s.id || ''; sec.dataset.sectionId = s.id; }
       sec.appendChild(el('h2', 'section-title', esc(s.title || '')));
 
       /* 鼠标经过时右上角出现的小垃圾桶，点了就删掉整个模块（打印时隐藏） */
@@ -341,7 +347,9 @@
 
     if (!animate || !('IntersectionObserver' in window)) return;
 
-    var armed = [];
+    var timers = new Set();
+    var listeners = [];
+    revealCleanup.set(root, function () { io.disconnect(); timers.forEach(clearTimeout); listeners.forEach(function (entry) { entry[0].removeEventListener('animationend', entry[1]); }); });
 
     /* 把「还没进入视口」的区块登记为待播动画（此时仍旧可见，只是记个名单） */
     var io = new IntersectionObserver(function (entries) {
@@ -351,22 +359,20 @@
         io.unobserve(t);
         t.classList.remove('is-visible');
         t.classList.add('reveal');
-        t.addEventListener('animationend', function onEnd() {
-          t.classList.remove('reveal');
-          t.classList.add('is-visible');
-          t.removeEventListener('animationend', onEnd);
-        });
-        /* 保险：动画事件万一不来，1 秒后强制恢复可见 */
-        setTimeout(function () {
-          t.classList.remove('reveal');
-          t.classList.add('is-visible');
-        }, 1000);
+        var timer;
+        function finish() {
+          clearTimeout(timer); timers.delete(timer);
+          t.classList.remove('reveal'); t.classList.add('is-visible');
+          t.removeEventListener('animationend', finish);
+        }
+        t.addEventListener('animationend', finish);
+        listeners.push([t,finish]);
+        timer = setTimeout(finish,1000); timers.add(timer);
       });
     }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
 
     all.forEach(function (t) {
       if (t.getBoundingClientRect().top > window.innerHeight) {
-        armed.push(t);
         io.observe(t);
       }
     });
@@ -440,6 +446,8 @@
     applyTitle: applyTitle,
     MINI_WIDTH: MINI_WIDTH,
     esc: esc,
+    safeHref:safeHref,
+    safeImageSrc:safeImageSrc,
     ICONS: ICONS
   };
 })(typeof window !== 'undefined' ? window : globalThis);

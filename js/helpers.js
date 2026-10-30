@@ -152,29 +152,57 @@
     var ex = Array.isArray(existing) ? existing : [];
     var pa = Array.isArray(parsed) ? parsed : [];
 
-    var parsedById = {};
-    pa.forEach(function (s) { if (s && s.id) parsedById[s.id] = s; });
-
-    var out = [];
-    var used = {};
-
-    ex.forEach(function (s) {
-      if (!s || !s.id) return;
-      used[s.id] = true;
-      var hit = parsedById[s.id];
-      out.push({ section: hit || s, fromParse: !!hit });
+    var out = [], used = [];
+    ex.forEach(function (section) {
+      if (!section || !section.id) return;
+      var match = -1;
+      pa.some(function (parsed, index) {
+        if (!parsed || used[index]) return false;
+        if (parsed.id === section.id || (parsed.kind && parsed.kind === (section.kind || section.id))) { match=index; return true; }
+        return false;
+      });
+      if (match !== -1) used[match]=true;
+      out.push({section:match === -1 ? section : pa[match],fromParse:match !== -1});
     });
-
-    pa.forEach(function (s) {
-      if (!s || !s.id || used[s.id]) return;
-      used[s.id] = true;
-      out.push({ section: s, fromParse: true });
-    });
+    pa.forEach(function (section,index) { if (section && section.id && !used[index]) out.push({section:section,fromParse:true}); });
 
     return out;
   }
 
+  var QUALITY = { GOOD:85, POOR:60 };
+  function qualityResult(hits, total, mode) {
+    var score = total ? Math.round(hits / total * 100) : 0;
+    return { score:score, label:score >= QUALITY.GOOD ? '识别良好' : score >= QUALITY.POOR ? '基本可用，建议核对' : '识别较差，请重点核对', hits:hits, lines:total, mode:mode };
+  }
+  function safeHref(value) {
+    var text = String(value || '').trim();
+    if (/[\u0000-\u0020\u007f]/.test(text)) return '';
+    return /^(?:https?:\/\/|mailto:|tel:)/i.test(text) ? text : '';
+  }
+  function safeImageSrc(value) {
+    var text = String(value || '').trim();
+    if (/[\u0000-\u001f\u007f<>"']/.test(text)) return '';
+    if (/^https:\/\/[^\s]+$/i.test(text)) return text;
+    if (/^data:image\/(?:png|jpeg|jpg|gif|webp|avif|bmp);base64,[a-z0-9+/=]+$/i.test(text)) return text;
+    // Keep bundled assets usable under file://; reject traversal and encoded paths.
+    if (/^assets\/(?:[a-z0-9_-]+\/)*[a-z0-9_.-]+\.(?:svg|png|jpe?g|gif|webp|avif)$/i.test(text) && text.indexOf('..') === -1) return text;
+    return '';
+  }
+  function sectionId(value, used) {
+    var id = String(value || 'section').toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-+|-+$/g,'') || 'section';
+    id = 'sec-' + id.replace(/^sec-/, '');
+    var candidate = id, number = 2;
+    while (used[candidate]) candidate = id + '-' + number++;
+    used[candidate] = true;
+    return candidate;
+  }
+
   var API = {
+    QUALITY:QUALITY,
+    qualityResult:qualityResult,
+    safeHref:safeHref,
+    safeImageSrc:safeImageSrc,
+    sectionId:sectionId,
     SORT_RULES: SORT_RULES,
     SORT_LABELS: SORT_LABELS,
     inferSort: inferSort,

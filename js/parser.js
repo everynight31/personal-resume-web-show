@@ -29,7 +29,7 @@
 
   /* ------------------------------------------------------------ 常量与正则 */
 
-  var QUALITY = { GOOD: 85, POOR: 60 };
+  var QUALITY = global.ResumeHelpers && global.ResumeHelpers.QUALITY ? global.ResumeHelpers.QUALITY : { GOOD:85, POOR:60 };
   var NL = '\u2013';                       /* en dash，日期区间统一用它连接 */
   var ARROW = ' | ';
 
@@ -1238,9 +1238,7 @@
       check(prj.items.some(function (it) { return it.blocks && it.blocks.length; }));
     } else { total++; }
 
-    var score = total ? hits / total : 0;
-    var label = score * 100 >= QUALITY.GOOD ? '识别良好' : score * 100 >= QUALITY.POOR ? '基本可用，建议核对' : '识别较差，请重点核对';
-    return { score: Math.round(score * 100), label: label, hits: hits, lines: total, mode: res.mode };
+    return global.ResumeHelpers && typeof global.ResumeHelpers.qualityResult === 'function' ? global.ResumeHelpers.qualityResult(hits,total,res.mode) : {score:total ? Math.round(hits/total*100) : 0,label:'请核对识别结果',hits:hits,lines:total,mode:res.mode};
   }
 
   /* ---------------------------------------------------- Review → 数据补丁 */

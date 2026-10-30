@@ -580,6 +580,7 @@
   function loadSettings() {
     var cfg = Store.getLLM();
     if (els.llmEnabled) els.llmEnabled.checked = !!cfg.enabled;
+    if (els.llmRedact) els.llmRedact.checked = cfg.redactContacts !== false;
     if (els.llmKey) els.llmKey.value = cfg.apiKey || '';
     if (els.llmBase) els.llmBase.value = cfg.baseUrl || '';
     if (els.llmModel) els.llmModel.value = cfg.model || '';
@@ -592,6 +593,7 @@
   function saveSettings() {
     var cfg = {
       enabled: !!(els.llmEnabled && els.llmEnabled.checked),
+      redactContacts: !els.llmRedact || els.llmRedact.checked,
       apiKey: els.llmKey ? els.llmKey.value.trim() : '',
       baseUrl: els.llmBase ? els.llmBase.value.trim() : '',
       model: els.llmModel ? els.llmModel.value.trim() : '',
@@ -622,7 +624,7 @@
 
   function bindSettings() {
     /* ---------------- 设置页 ---------------- */
-    [els.llmEnabled, els.llmKey, els.llmBase, els.llmModel, els.llmTrigger].forEach(function (n) {
+    [els.llmEnabled, els.llmRedact, els.llmKey, els.llmBase, els.llmModel, els.llmTrigger].forEach(function (n) {
       if (!n) return;
       n.addEventListener('change', function () {
         saveSettings();
@@ -656,6 +658,13 @@
         });
       });
     }
+
+    if (els.btnExportOld) els.btnExportOld.addEventListener('click', function () {
+      var raw = Store.exportRecovery();
+      if (!raw) { status(els.dataStatus, '暂无旧数据或迁移备份', 'warn'); return; }
+      download('resume-旧数据备份.json', raw);
+      status(els.dataStatus, '已导出原始旧数据，请妥善保存', 'ok');
+    });
 
     if (els.btnExport) {
       els.btnExport.addEventListener('click', function () {
@@ -694,7 +703,8 @@
       els.btnReset.addEventListener('click', function () {
         if (!global.confirm('确定要放弃网页上的所有修改，恢复 data.js 的默认数据吗？')) return;
         Store.pushUndo(Store.load());
-        Store.reset();
+        try { Store.reset(); }
+        catch (error) { status(els.dataStatus, error.message, 'err'); return; }
         renderMain();
         state.draft = Store.load();
         state.review = null;
@@ -742,7 +752,7 @@
         e.preventDefault();
         var sec = btn.closest('.resume-section');
         if (!sec) return;
-        var id = sec.id;
+        var id = sec.dataset.sectionId || sec.id;
         var t = sec.querySelector('.section-title');
         removeModule(id, t ? t.textContent : id);
       });

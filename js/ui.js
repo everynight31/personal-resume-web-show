@@ -35,6 +35,7 @@
 
   var els = {
     root: $('resume-root'),
+    recoveryNotice: $('recovery-notice'),
     drawer: $('parser-drawer'),
     overlay: $('parser-overlay'),
     fab: $('parser-fab'),
@@ -61,6 +62,7 @@
     toast: $('toast'),
     /* 设置页 */
     llmEnabled: $('llm-enabled'),
+    llmRedact: $('llm-redact'),
     llmKey: $('llm-key'),
     llmBase: $('llm-base'),
     llmModel: $('llm-model'),
@@ -69,6 +71,7 @@
     btnLLMClear: $('btn-llm-clear'),
     btnLLMTest: $('btn-llm-test'),
     btnExport: $('btn-export'),
+    btnExportOld: $('btn-export-old'),
     btnImport: $('btn-import'),
     importInput: $('import-input'),
     btnReset: $('btn-reset'),
@@ -320,10 +323,12 @@
 
     if (els.btnUndo) {
       els.btnUndo.addEventListener('click', function () {
-        var restored = Store.undo();
+        var restored;
+        try { restored = Store.undo(); }
+        catch (error) { status(els.applyStatus, '撤销失败：' + error.message, 'err'); return; }
         if (!restored) return;
         renderMain();
-        els.btnUndo.disabled = true;
+        els.btnUndo.disabled = !Store.canUndo();
         status(els.applyStatus, '已撤销上一次应用', 'ok');
         state.draft = Store.load();
         renderMini();
@@ -367,14 +372,14 @@
 
     var data = Store.load();
 
-    /* 如果刚才丢掉了过期的本地数据，明确告诉用户一声，
-       否则「我明明改了内容却没生效」会非常难排查 */
-    if (Store.lastDiscard) {
-      setTimeout(function () {
-        toast('检测到 data.js 已更新，浏览器里的旧内容已清除（' + Store.lastDiscard + '）', 6000);
-      }, 600);
-      if (els.dataStatus) status(els.dataStatus, '已丢弃过期的本地数据：' + Store.lastDiscard, 'warn');
-      Store.lastDiscard = null;
+    if (els.btnUndo) els.btnUndo.disabled = !Store.canUndo();
+    if (Store.dataNotice) {
+      toast(Store.dataNotice, 8000);
+      status(els.dataStatus, Store.dataNotice, 'warn');
+      if (els.recoveryNotice) {
+        els.recoveryNotice.hidden = false;
+        els.recoveryNotice.textContent = Store.dataNotice + '。在「设置 → 数据管理」中可导出旧数据 / 迁移备份。';
+      }
     }
 
     if (typeof data.profile === 'object' && data.profile) data.profile.avatar = data.profile.avatar || '';

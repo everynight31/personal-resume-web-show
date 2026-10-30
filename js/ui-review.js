@@ -660,7 +660,7 @@
   }
 
   function toSection(sec) {
-    var out = { id: sec.id, title: sec.title, anchor: sec.anchor || sec.id, sort: sec.sort };
+    var out = { id: sec.id, title: sec.title, anchor: sec.anchor || sec.id, sort: sec.sort, kind: sec.kind };
     if (sec.sort === 'tags') out.groups = clone(sec.groups);
     else out.items = clone(sec.items);
     return out;
@@ -704,11 +704,11 @@
       return;
     }
 
-    var previousUndo = Store._undo;
+    var previousUndo = Store.getUndoState();
     Store.pushUndo(before);
     try { Store.save(next); }
     catch (error) {
-      Store._undo = previousUndo;
+      Store.restoreUndoState(previousUndo);
       status(els.applyStatus, '保存失败：' + error.message + '；请压缩头像或导出备份后释放空间。', 'err');
       els.applyStatus.classList.remove('is-ok');
       els.applyStatus.classList.add('is-err');
@@ -716,7 +716,7 @@
     }
 
     renderMain();
-    status(els.applyStatus, '已应用 ' + applied + ' 项修改到简历', 'ok');
+    status(els.applyStatus, '已应用 ' + applied + ' 项修改到简历' + (Store.historyNotice ? '；' + Store.historyNotice : ''), 'ok');
     els.applyStatus.classList.add('is-ok');
     els.applyStatus.classList.remove('is-err');
     if (els.btnUndo) els.btnUndo.disabled = false;
