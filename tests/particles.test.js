@@ -96,7 +96,18 @@ check(queue.size === 0 && starArcs > 0, '减少动态效果时星光保留静态
 P.setEffect('water'); motionChange({matches:false});
 check(P.getEffect() === 'water' && queue.size === 1, '星光与水面可以切换且不重复调度');
 
-check(P.EFFECTS.length === 11 && P.EFFECTS.some(e => e.id === 'petals'), '花瓣加入设置列表，共11个背景选项');
+check(P.EFFECTS.length === 16 && P.EFFECTS.some(e => e.id === 'petals'), '花瓣加入设置列表，共16个背景选项');
+['aurora', 'synthwave', 'hyperspace', 'fireworks', 'fireflies'].forEach(id => {
+  check(P.EFFECTS.some(e => e.id === id), id + ' 出现在设置列表');
+  check(P.setEffect(id) === true && doc.documentElement['data-background'] === id, id + ' 可以切换');
+  events.pointermove({ clientX: 300, clientY: 200 });
+  events.pointerdown({ clientX: 320, clientY: 180 });
+  events.scroll && events.scroll();
+  for (let i = 1; i <= 90; i++) frame(5000 + i * 34);
+  check(queue.size === 1, id + ' 运行中只保留一个动画帧');
+});
+P.setEffect('off');
+check(queue.size === 0, '切到关闭后不再申请动画帧');
 P.setEffect('petals');
 check(doc.documentElement['data-background'] === 'petals', '花瓣与文字主题同步');
 events.touchmove({touches:[{clientX:180,clientY:220}]});

@@ -75,6 +75,12 @@
   /* 画布已按 DPR 缩放，这里给的是 CSS 像素坐标 */
   function clear(w, h) { ctx.clearRect(0, 0, w, h); }
 
+  /* 部分特效在深色下使用叠加发光，浅色下改用柔和配色 */
+  function isDark() {
+    var root = document.documentElement;
+    return !!(root && root.getAttribute && root.getAttribute('data-theme') === 'dark');
+  }
+
   /* 鼠标附近的排斥力，默认特效用来做视差 */
   function repel(p, radius, strength) {
     if (!mouse.active) return;
@@ -504,6 +510,325 @@
       }
     },
 
+    /* ------------------------------------------------------ 极光流彩
+       几团大面积柔光色块缓慢漂移、交融，类似系统壁纸的流体渐变；
+       鼠标会把最亮的一团轻轻牵过去，点击让色块短暂膨胀。 */
+    aurora: {
+      meta: { id: 'aurora', name: '极光流彩', desc: '大块柔光渐变缓慢流动交融，鼠标牵引光团，点击光晕膨胀' },
+      init: function (w, h, rnd) {
+        var dark = isDark();
+        var palette = dark
+          ? ['10,132,255', '191,90,242', '255,55,95', '48,209,88', '100,210,255', '255,159,10']
+          : ['90,200,250', '175,130,255', '255,140,180', '120,230,190', '255,200,120', '120,160,255'];
+        var n = Math.round(clamp(5 * density, 3, 8));
+        var big = Math.max(w, h);
+        var blobs = [];
+        for (var i = 0; i < n; i++) {
+          blobs.push({
+            cx: rnd(), cy: rnd(),
+            ax: 0.18 + rnd() * 0.22, ay: 0.14 + rnd() * 0.2,
+            sx: 0.05 + rnd() * 0.08, sy: 0.04 + rnd() * 0.07,
+            px: rnd() * 6.28, py: rnd() * 6.28,
+            r: big * (0.32 + rnd() * 0.26),
+            color: palette[i % palette.length]
+          });
+        }
+        var t = rnd() * 100, pulse = 0, lead = { x: w * 0.5, y: h * 0.4 };
+        var alpha = dark ? 0.42 : 0.5;
+        return {
+          disturb: function (x, y, force) { if (force) pulse = 1; },
+          frame: function (dt) {
+            t += dt;
+            pulse = Math.max(0, pulse - dt * 0.8);
+            clear(w, h);
+            ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
+            for (var i = 0; i < blobs.length; i++) {
+              var b = blobs[i];
+              var x = (b.cx + Math.sin(t * b.sx + b.px) * b.ax) * w;
+              var y = (b.cy + Math.cos(t * b.sy + b.py) * b.ay) * h;
+              if (i === 0) {
+                var tx = mouse.active ? mouse.x : x, ty = mouse.active ? mouse.y : y;
+                lead.x += (tx - lead.x) * Math.min(1, dt * 0.9);
+                lead.y += (ty - lead.y) * Math.min(1, dt * 0.9);
+                x = lead.x; y = lead.y;
+              }
+              var r = b.r * (1 + pulse * 0.25);
+              var g = ctx.createRadialGradient(x, y, 0, x, y, r);
+              g.addColorStop(0, 'rgba(' + b.color + ',' + alpha + ')');
+              g.addColorStop(0.55, 'rgba(' + b.color + ',' + (alpha * 0.35) + ')');
+              g.addColorStop(1, 'rgba(' + b.color + ',0)');
+              ctx.fillStyle = g;
+              ctx.fillRect(0, 0, w, h);
+            }
+            ctx.globalCompositeOperation = 'source-over';
+          }
+        };
+      }
+    },
+
+    /* ------------------------------------------------------ 霓虹网格
+       复古未来风：条纹落日 + 向观众滚动的透视网格。
+       鼠标左右移动改变消失点，滚动页面让网格加速。 */
+    synthwave: {
+      meta: { id: 'synthwave', name: '霓虹网格', desc: '条纹落日与透视霓虹网格向你驶来，鼠标转向，滚动加速' },
+      init: function (w, h, rnd) {
+        var dark = isDark();
+        var horizon = h * 0.7;            /* 压低地平线，避开首屏的姓名和联系方式 */
+        var sunR = Math.min(w, h) * 0.14;
+        var grid = dark ? '255,60,200' : '214,51,132';
+        var glow = dark ? '0,229,255' : '0,150,199';
+        var a = dark ? 0.75 : 0.45;
+        var offset = 0, boost = 0, vx = w / 2, lastScroll = null;
+        var stars = [];
+        var ns = dark ? count(70, w, h, 30, 140) : 0;
+        for (var i = 0; i < ns; i++) stars.push({ x: rnd() * w, y: rnd() * horizon * 0.9, r: 0.4 + rnd() * 1.1, p: rnd() * 6.28 });
+
+        function lineAlpha(y) { return clamp((y - horizon) / (h - horizon), 0, 1); }
+
+        return {
+          scroll: function (y) {
+            if (lastScroll !== null) boost = Math.min(4, boost + Math.abs(y - lastScroll) * 0.02);
+            lastScroll = y;
+          },
+          disturb: function (x, y, force) { if (force) boost = Math.min(4, boost + 1.5); },
+          frame: function (dt) {
+            boost = Math.max(0, boost - dt * 1.6);
+            offset += dt * (0.55 + boost);
+            var target = mouse.active ? w / 2 + (mouse.x - w / 2) * 0.35 : w / 2;
+            vx += (target - vx) * Math.min(1, dt * 2);
+            clear(w, h);
+
+            for (var s = 0; s < stars.length; s++) {
+              var st = stars[s];
+              st.p += dt * 1.5;
+              ctx.fillStyle = 'rgba(255,255,255,' + (0.25 + 0.25 * Math.sin(st.p)) + ')';
+              ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, 6.283); ctx.fill();
+            }
+
+            /* 落日：竖向渐变圆，下半部用 clearRect 切出越来越宽的条纹 */
+            var sx = vx, sy = horizon - sunR * 0.35;
+            var sg = ctx.createLinearGradient(0, sy - sunR, 0, sy + sunR);
+            sg.addColorStop(0, dark ? 'rgba(255,214,102,0.7)' : 'rgba(255,190,90,0.45)');
+            sg.addColorStop(1, dark ? 'rgba(255,61,139,0.75)' : 'rgba(255,90,150,0.4)');
+            ctx.fillStyle = sg;
+            ctx.beginPath(); ctx.arc(sx, sy, sunR, 0, 6.283); ctx.fill();
+            for (var k = 0; k < 6; k++) {
+              var band = sy + sunR * (0.12 + k * 0.15);
+              ctx.clearRect(sx - sunR - 2, band, sunR * 2 + 4, 1.5 + k * 1.3);
+            }
+            ctx.clearRect(0, horizon, w, h - horizon);
+
+            /* 地平线辉光 */
+            var hg = ctx.createLinearGradient(0, horizon - 30, 0, horizon + 6);
+            hg.addColorStop(0, 'rgba(' + glow + ',0)');
+            hg.addColorStop(1, 'rgba(' + glow + ',' + (a * 0.5) + ')');
+            ctx.fillStyle = hg;
+            ctx.fillRect(0, horizon - 30, w, 36);
+
+            /* 纵线：从消失点放射到底边，越靠近地平线越淡 */
+            var vg = ctx.createLinearGradient(0, horizon, 0, h);
+            vg.addColorStop(0, 'rgba(' + grid + ',0)');
+            vg.addColorStop(1, 'rgba(' + grid + ',' + a + ')');
+            ctx.strokeStyle = vg;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            var spread = w * 0.16;
+            for (var j = -14; j <= 14; j++) {
+              ctx.moveTo(vx + j * spread * 0.03, horizon);
+              ctx.lineTo(vx + j * spread * 1.6, h + 40);
+            }
+            ctx.stroke();
+
+            /* 横线：按透视间距排布，整体随 offset 向观众移动 */
+            var frac = offset % 1;
+            for (var d = 0; d < 22; d++) {
+              var z = d + 1 - frac;
+              var y = horizon + (h - horizon) * (1 / (z * 0.42 + 0.58));
+              if (y > h + 2) continue;
+              var la = lineAlpha(y);
+              ctx.strokeStyle = 'rgba(' + grid + ',' + (a * la) + ')';
+              ctx.lineWidth = 0.6 + la * 1.4;
+              ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+          }
+        };
+      }
+    },
+
+    /* ------------------------------------------------------ 星际穿梭
+       曲速飞行：星点从消失点向四周拉成光线；鼠标偏转航向，点击跃迁加速。 */
+    hyperspace: {
+      meta: { id: 'hyperspace', name: '星际穿梭', desc: '星光从中心拉成光线扑面而来，鼠标转向，点击跃迁加速' },
+      init: function (w, h, rnd) {
+        var n = count(240, w, h, 100, 480);
+        var depth = Math.max(w, h);
+        var stars = [];
+        function spawn(s, far) {
+          s.x = (rnd() * 2 - 1) * depth;
+          s.y = (rnd() * 2 - 1) * depth;
+          s.z = far ? depth : rnd() * depth + 1;
+          s.pz = s.z;
+          return s;
+        }
+        for (var i = 0; i < n; i++) stars.push(spawn({}, false));
+        var cx = w / 2, cy = h / 2, warp = 0;
+        var f = Math.min(w, h) * 0.5;
+        return {
+          disturb: function (x, y, force) { if (force) warp = 1; },
+          frame: function (dt) {
+            warp = Math.max(0, warp - dt * 0.6);
+            var tx = mouse.active ? w / 2 - (mouse.x - w / 2) * 0.3 : w / 2;
+            var ty = mouse.active ? h / 2 - (mouse.y - h / 2) * 0.3 : h / 2;
+            cx += (tx - cx) * Math.min(1, dt * 1.5);
+            cy += (ty - cy) * Math.min(1, dt * 1.5);
+            var speed = depth * (0.22 + warp * 1.6) * dt;
+            clear(w, h);
+            ctx.lineCap = 'round';
+            for (var i = 0; i < stars.length; i++) {
+              var s = stars[i];
+              s.pz = s.z;
+              s.z -= speed;
+              if (s.z < 1) { spawn(s, true); continue; }
+              var x = cx + s.x / s.z * f, y = cy + s.y / s.z * f;
+              var tz = s.z + speed * 6;          /* 拖尾按多帧长度画，静止截图也能看出速度感 */
+              var px = cx + s.x / tz * f, py = cy + s.y / tz * f;
+              if (x < -50 || x > w + 50 || y < -50 || y > h + 50) { spawn(s, true); continue; }
+              var near = 1 - s.z / depth;
+              ctx.strokeStyle = withAlpha(colors.dot, clamp(near * 1.3, 0.08, 0.95));
+              ctx.lineWidth = 0.6 + near * 2.6;
+              ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+            }
+            ctx.lineCap = 'butt';
+          }
+        };
+      }
+    },
+
+    /* ------------------------------------------------------ 烟花绽放
+       每隔一两秒自动升起一枚，点击空白处在指定位置放一枚。 */
+    fireworks: {
+      meta: { id: 'fireworks', name: '烟花绽放', desc: '烟花升空后绚烂炸开、拖尾下坠，点击任意空白处亲手放一枚' },
+      init: function (w, h, rnd) {
+        var dark = isDark();
+        var rockets = [], sparks = [];
+        var cap = Math.round(clamp(700 * density, 250, 1400));
+        var next = 0.4;
+        function launch(x, y) {
+          var sx = x === undefined ? w * (0.15 + rnd() * 0.7) : x;
+          var ty = y === undefined ? h * (0.12 + rnd() * 0.35) : y;
+          rockets.push({ x: sx + (rnd() - 0.5) * 60, y: h + 10, tx: sx, ty: ty, hue: Math.floor(rnd() * 360) });
+        }
+        function explode(r) {
+          var m = Math.round(clamp(70 * density, 40, 120));
+          var hue2 = (r.hue + 40 + rnd() * 60) % 360;
+          for (var i = 0; i < m && sparks.length < cap; i++) {
+            var ang = (i / m) * 6.283 + rnd() * 0.2;
+            var sp = 160 + rnd() * 200;
+            sparks.push({
+              x: r.x, y: r.y, px: r.x, py: r.y,
+              vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+              life: 1, decay: 0.45 + rnd() * 0.45,
+              hue: rnd() < 0.7 ? r.hue : hue2
+            });
+          }
+        }
+        var light = dark ? 62 : 52;
+        return {
+          disturb: function (x, y, force) { if (force && rockets.length < 6) launch(x, y); },
+          frame: function (dt) {
+            next -= dt;
+            if (next <= 0) { launch(); next = 0.9 + rnd() * 1.4; }
+            clear(w, h);
+            ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
+            ctx.lineCap = 'round';
+
+            for (var i = rockets.length - 1; i >= 0; i--) {
+              var r = rockets[i];
+              var oy = r.y, ox = r.x;
+              r.y -= dt * (h * 0.9);
+              r.x += (r.tx - r.x) * Math.min(1, dt * 2);
+              ctx.strokeStyle = 'hsla(' + r.hue + ',100%,' + light + '%,0.9)';
+              ctx.lineWidth = 2;
+              ctx.beginPath(); ctx.moveTo(ox, oy + 14); ctx.lineTo(r.x, r.y); ctx.stroke();
+              if (r.y <= r.ty) { explode(r); rockets.splice(i, 1); }
+            }
+
+            var drag = Math.pow(0.3, dt);
+            for (var j = sparks.length - 1; j >= 0; j--) {
+              var s = sparks[j];
+              s.px = s.x; s.py = s.y;
+              s.vx *= drag; s.vy = s.vy * drag + 140 * dt;
+              s.x += s.vx * dt; s.y += s.vy * dt;
+              s.life -= s.decay * dt;
+              if (s.life <= 0) { sparks.splice(j, 1); continue; }
+              ctx.strokeStyle = 'hsla(' + s.hue + ',100%,' + light + '%,' + clamp(s.life, 0, 1) + ')';
+              ctx.lineWidth = 1 + s.life * 1.6;
+              ctx.beginPath(); ctx.moveTo(s.px - s.vx * 0.03, s.py - s.vy * 0.03); ctx.lineTo(s.x, s.y); ctx.stroke();
+            }
+            ctx.lineCap = 'butt';
+            ctx.globalCompositeOperation = 'source-over';
+          }
+        };
+      }
+    },
+
+    /* ------------------------------------------------------ 萤火微光
+       暖色光点忽明忽暗地游走，靠近鼠标时被吸引，点击会把它们惊散。 */
+    fireflies: {
+      meta: { id: 'fireflies', name: '萤火微光', desc: '暖色光点忽明忽暗地游走，靠近鼠标会被吸引，点击惊散' },
+      init: function (w, h, rnd) {
+        var dark = isDark();
+        var color = dark ? '255,224,102' : '230,150,20';
+        var n = count(55, w, h, 22, 110);
+        var flies = [];
+        for (var i = 0; i < n; i++) {
+          flies.push({
+            x: rnd() * w, y: rnd() * h,
+            ang: rnd() * 6.283, sp: 14 + rnd() * 22,
+            r: 1.4 + rnd() * 1.8,
+            ph: rnd() * 6.283, rate: 0.6 + rnd() * 1.4,
+            kx: 0, ky: 0
+          });
+        }
+        return {
+          disturb: function (x, y, force) {
+            if (!force) return;
+            for (var i = 0; i < flies.length; i++) {
+              var f = flies[i], dx = f.x - x, dy = f.y - y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+              if (d < 260) { f.kx += dx / d * 260 * (1 - d / 260); f.ky += dy / d * 260 * (1 - d / 260); }
+            }
+          },
+          frame: function (dt) {
+            clear(w, h);
+            ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
+            for (var i = 0; i < flies.length; i++) {
+              var f = flies[i];
+              f.ang += (rnd() - 0.5) * 2.4 * dt;
+              var vx = Math.cos(f.ang) * f.sp, vy = Math.sin(f.ang) * f.sp;
+              if (mouse.active) {
+                var dx = mouse.x - f.x, dy = mouse.y - f.y, d2 = dx * dx + dy * dy;
+                if (d2 < 48000 && d2 > 900) { var d = Math.sqrt(d2); vx += dx / d * 26; vy += dy / d * 26; }
+              }
+              f.kx *= Math.pow(0.05, dt); f.ky *= Math.pow(0.05, dt);
+              f.x += (vx + f.kx) * dt; f.y += (vy + f.ky) * dt;
+              if (f.x < -20) f.x = w + 20; else if (f.x > w + 20) f.x = -20;
+              if (f.y < -20) f.y = h + 20; else if (f.y > h + 20) f.y = -20;
+              f.ph += f.rate * dt;
+              var glowA = Math.max(0, Math.sin(f.ph)) * (dark ? 0.9 : 0.7) + 0.08;
+              var R = f.r * 9;
+              var g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, R);
+              g.addColorStop(0, 'rgba(' + color + ',' + glowA + ')');
+              g.addColorStop(0.18, 'rgba(' + color + ',' + (glowA * 0.45) + ')');
+              g.addColorStop(1, 'rgba(' + color + ',0)');
+              ctx.fillStyle = g;
+              ctx.beginPath(); ctx.arc(f.x, f.y, R, 0, 6.283); ctx.fill();
+            }
+            ctx.globalCompositeOperation = 'source-over';
+          }
+        };
+      }
+    },
+
     /* ---------------------------------------------------------- 6. 关闭 */
     off: {
       meta: { id: 'off', name: '关闭（纯色背景）', desc: '不绘制任何背景，页面最轻量' },
@@ -514,7 +839,7 @@
   };
 
   /* 元数据列表，顺序即设置页里的显示顺序 */
-  var EFFECT_LIST = ['water', 'starlight', 'ink', 'clouds', 'petals', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
+  var EFFECT_LIST = ['water', 'starlight', 'ink', 'clouds', 'petals', 'aurora', 'synthwave', 'hyperspace', 'fireworks', 'fireflies', 'network', 'bubbles', 'starfield', 'waves', 'comets', 'off'].map(function (id) {
     return EFFECTS[id].meta;
   });
 
@@ -538,12 +863,15 @@
     current.frame(0, W, H);   /* 立即绘制；减少动态效果时保留这一帧 */
   }
 
+  /* 大面积渐变类特效约 30 帧即可流畅，省一半绘制 */
+  var THROTTLED = { water: 1, starlight: 1, ink: 1, clouds: 1, petals: 1, aurora: 1, synthwave: 1 };
+
   var lastTs = 0;
   function loop(ts) {
     rafId = null;
     if (paused || printing || reduceMotion || currentId === 'off' || !current) return;
     rafId = global.requestAnimationFrame(loop);
-    if ((currentId === 'water' || currentId === 'starlight' || currentId === 'ink' || currentId === 'clouds' || currentId === 'petals') && lastTs && ts - lastTs < 32) return;
+    if (THROTTLED[currentId] && lastTs && ts - lastTs < 32) return;
     var dt = lastTs ? Math.min(0.05, (ts - lastTs) / 1000) : 1 / 60;  /* 夹住，避免切回标签页时跳帧 */
     lastTs = ts;
     if (!reduceMotion) current.frame(dt, W, H);
