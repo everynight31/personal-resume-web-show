@@ -124,15 +124,8 @@
     }
 
     if (!opts.mini) {
+      /* 章节导航已提供跳转，这里只保留打印入口 */
       var actions = el('div', 'hero-actions');
-      var first = (data.sections || []).filter(function (s) {
-        return s && !s.hidden && ((s.items && s.items.length) || (s.groups && s.groups.length));
-      })[0];
-      if (first) {
-        var browse = el('a', 'btn primary', '浏览简历 <span aria-hidden="true">↓</span>');
-        browse.href = '#' + (first.anchor || first.id || '');
-        actions.appendChild(browse);
-      }
       var print = el('button', 'btn ghost', '打印 / 导出 PDF');
       print.type = 'button';
       print.addEventListener('click', function () { global.print(); });
@@ -169,13 +162,12 @@
     (section.items || []).forEach(function (it) {
       var item = el('div', 'timeline-item');
 
-      var icon = el('div', 'timeline-icon');
+      /* 只有填写了 Logo 才显示图标，避免千篇一律的占位符 */
       if (safeImageSrc(it.logo)) {
+        var icon = el('div', 'timeline-icon');
         icon.innerHTML = '<img src="' + esc(safeImageSrc(it.logo)) + '" alt="">';
-      } else {
-        icon.innerHTML = ICONS.cap;
+        item.appendChild(icon);
       }
-      item.appendChild(icon);
 
       var content = el('div', 'timeline-content');
       if (it.date) content.appendChild(el('span', 'timeline-date', esc(it.date)));
@@ -202,10 +194,11 @@
       var card = el('article', 'card experience-item');
 
       var header = el('header', 'card-header');
-      var ci = el('div', 'card-icon');
-      if (safeImageSrc(it.logo)) ci.innerHTML = '<img src="' + esc(safeImageSrc(it.logo)) + '" alt="">';
-      else ci.textContent = firstChar(it.org);
-      header.appendChild(ci);
+      if (safeImageSrc(it.logo)) {
+        var ci = el('div', 'card-icon');
+        ci.innerHTML = '<img src="' + esc(safeImageSrc(it.logo)) + '" alt="">';
+        header.appendChild(ci);
+      }
 
       var headText = el('div', 'card-head-text');
       headText.appendChild(el('h3', null, esc(it.org || '')));

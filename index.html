@@ -6,7 +6,9 @@
 <!-- 这里是打开瞬间的占位标题，页面渲染后会由 render.js 按 data.js 的
      meta.title（或 profile.name）自动改写，所以改简历内容不用动这一行 -->
 <title>简历</title>
-<meta name="description" content="可编辑的交互式网页简历，支持粘贴识别、模块管理、11 个背景选项与配套文字主题、深浅模式和 PDF 打印。">
+<meta name="description" content="可编辑的交互式网页简历：粘贴识别、模块管理、动态背景、深浅模式与 PDF 打印。">
+<meta name="theme-color" content="#F5F5F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 
 <!-- 主题需在样式表之前确定，避免深色模式闪白 -->
@@ -89,10 +91,7 @@
         </div>
       </div>
 
-      <p class="hint">
-        带 <code>【小标题】</code> 的文本识别率最高（约 95%）；<b>没有小标题也能识别</b>，
-        靠日期、电话、邮箱等线索自动分段（准确率会降一些，右侧可逐项修正）。
-      </p>
+      <p class="hint">带 <code>【小标题】</code> 识别最准；没有小标题也能自动分段，右侧可逐项修正。</p>
 
       <textarea id="raw-input" aria-label="简历原始文本" spellcheck="false"
         placeholder="把简历文本整段粘贴到这里……"></textarea>
@@ -153,11 +152,7 @@
   <div id="panel-settings" class="drawer-body" data-panel="settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
     <section class="setting-group">
       <h3>大模型增强识别</h3>
-      <p class="hint">
-        默认<b>关闭</b>——关闭时全部在本地解析，不联网、不花钱。
-        打开后会把粘贴的文本发给 DeepSeek 做结构化抽取，对
-        <b>乱七八糟的自由文本</b>效果明显更好。Key 只存在你自己的浏览器里。
-      </p>
+      <p class="hint">默认关闭，全部在本地解析。开启后会把文本发送到下方接口，适合格式混乱的自由文本。</p>
 
       <label class="switch">
         <input type="checkbox" id="llm-enabled">
@@ -167,7 +162,7 @@
 
       <div class="field">
         <label for="llm-key">API Key</label>
-        <p class="hint">Key 会保存在当前浏览器的 localStorage，同源脚本可读取。请只填写可信的模型接口地址；启用后，调用会将简历文本和 Key 发送至该接口。在公共电脑上使用后请清除 Key。</p>
+        <p class="hint">仅保存在本浏览器（localStorage）。请只填可信接口，公共电脑用完请清除。</p>
         <input type="password" id="llm-key" placeholder="sk-..." autocomplete="off" spellcheck="false">
       </div>
 
@@ -205,10 +200,7 @@
 
     <section class="setting-group">
       <h3>背景效果</h3>
-      <p class="hint">
-        背景是自绘 Canvas，不联网、不依赖任何库。挑一个你喜欢的；
-        选择会记在浏览器里，刷新后保持。
-      </p>
+      <p class="hint">本地绘制，不联网；选择会自动保存。</p>
 
       <div class="effect-grid" id="effect-grid" role="radiogroup" aria-label="背景效果"></div>
 
@@ -225,10 +217,7 @@
 
     <section class="setting-group">
       <h3>头像</h3>
-      <p class="hint">
-        选一张照片，会自动裁成竖版证件照比例并压缩后存在浏览器里（不联网、不上传）。
-        建议用白底免冠照；压缩后的体积通常 100KB 以内。
-      </p>
+      <p class="hint">自动裁剪压缩后保存在本浏览器，不会上传。</p>
       <div class="avatar-row">
         <div class="avatar-preview" id="avatar-preview"></div>
         <div class="avatar-actions">
@@ -250,10 +239,7 @@
 
     <section class="setting-group">
       <h3>简历模块</h3>
-      <p class="hint">
-        这里的顺序就是页面上区块的顺序。可以删掉不需要的、调整先后，或者新建自己的模块
-        （荣誉奖项、发表论文、校园经历…）。新建后直接在本页填写内容，右侧会实时预览。
-      </p>
+      <p class="hint">顺序即页面顺序，可新建、排序、隐藏或删除。</p>
 
       <div class="new-module-row">
         <div class="field">
@@ -270,10 +256,7 @@
 
     <section class="setting-group">
       <h3>数据管理</h3>
-      <p class="hint">
-        本地修改以完整快照保存在浏览器 localStorage；没有快照时才使用 <code>data.js</code> 默认值。版本更新会先备份再迁移，已删除字段不会被默认值补回。
-        换电脑或清缓存前记得导出备份。
-      </p>
+      <p class="hint">修改保存在本浏览器，换电脑或清缓存前请先导出 JSON。</p>
       <div class="btn-row">
         <button type="button" id="btn-settings-undo" class="btn ghost" disabled>撤销上一步</button>
         <button type="button" id="btn-export-old" class="btn ghost">导出旧数据 / 迁移备份</button>
@@ -283,18 +266,6 @@
         <button type="button" id="btn-reset" class="btn danger">恢复默认数据</button>
       </div>
       <div class="apply-status" id="data-status"></div>
-    </section>
-
-    <section class="setting-group">
-      <h3>关于</h3>
-      <p class="hint">
-        个人简历的展示与编辑工具，支持粘贴识别、逐项校对、模块管理、头像更换与 JSON 备份。
-        提供流动水面、星光漫游、水墨晕染、云海晨雾、风吹花瓣等 11 个背景选项（含关闭），搭配对应文字主题，支持深浅模式、手机布局和系统「减少动态效果」。
-      </p>
-      <p class="hint">
-        支持旧数据迁移备份与导出、会话内多步撤销及模型调用前的可选联系方式脱敏。双击 <code>index.html</code> 即可运行。默认在本机处理；启用「大模型增强识别」后，会将待识别文本发送到配置的模型接口。
-        首页「打印 / 导出 PDF」可打开打印窗口，自动隐藏工具界面并使用 A4 排版；校对中的草稿需先应用。
-      </p>
     </section>
   </div>
 </aside>
