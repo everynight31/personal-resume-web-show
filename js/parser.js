@@ -807,13 +807,27 @@
       var hasContent = !!current && current.blocks.some(function (b) { return !!b.text; });
       var lastText = (current && current.blocks.length) ? (current.blocks[current.blocks.length - 1].text || '') : '';
 
+      /* 以动词开头或句中带逗号的是正文描述，不是标题（「负责……，QPS 提升 3 倍」） */
+      var looksSentence = /^(负责|参与|主导|完成|实现|设计|开发|优化|搭建|推动|带领|协助|独立|通过|利用|使用|基于)/.test(bare) ||
+        /[，,；;]/.test(bare);
+
       /* 短行、非列表项、没有句末标点 → 认定为「新项目标题」 */
       var isTitleish = !l.bullet && bare.length <= 65 && !/[。，、；;]$/.test(bare) &&
+        !(current && looksSentence) &&
         (TITLE_WORD_RE.test(bare) ||
          DATE_LINE_ONLY_RE.test(line) ||
          (!hasContent && bare.length <= 34) ||
          /* 上一段已经以句号收尾，这一行又短又不像正文 → 新项目标题 */
          (/[。！？!?]$/.test(lastText) && bare.length <= 26));
+      /* 第一行就是一整句描述：取第一个分句当名称，整句作为正文 */
+      if (!current && looksSentence && bare.length > 34) {
+        var head = bare.split(/[，,。；;]/)[0].replace(/^(毕业设计|毕设|课程设计)(做的是|是|为)/, '$1：');
+        current = newCard(head.length > 30 ? head.slice(0, 30) + '…' : head, pendingDate);
+        pendingDate = '';
+        current.blocks.push({ label: '', text: bare });
+        items.push(current);
+        return;
+      }
       if (!current || isTitleish) {
         var card = newCard(cleanPiece(bare.replace(/^(?:项目名称|项目|课题)\s*[:：]\s*/, '')), pendingDate);
         pendingDate = '';
@@ -837,11 +851,12 @@
     flushMeta();
 
     /* 无标签的正文块：分配合理的默认小标题 */
+    var introLabel = /^(work|internships?)$/.test(block.id || '') ? '工作内容' : '项目简介';
     items.forEach(function (it) {
       var unlabeled = it.blocks.filter(function (b) { return !b.label; });
-      if (unlabeled.length === 1 && it.blocks.length === 1) unlabeled[0].label = '项目简介';
+      if (unlabeled.length === 1 && it.blocks.length === 1) unlabeled[0].label = introLabel;
       else if (unlabeled.length > 1) {
-        unlabeled.forEach(function (b, i) { b.label = i === 0 ? '项目简介' : '补充说明'; });
+        unlabeled.forEach(function (b, i) { b.label = i === 0 ? introLabel : '补充说明'; });
       }
     });
 
@@ -958,7 +973,7 @@
   var FREE_HINTS = [
     {
       id: 'education', title: '教育背景', sort: 'timeline',
-      strong: /(大学|学院|学校|University|College|Institute)/i,
+      strong: /(大学(?!生)|学院|学校|University|College|Institute)/i,   /* 「大学生竞赛」不是学校 */
       words: [/教育(背景|经历)/, /学历/, /本科/, /硕士/, /博士/, /研究生/, /主修课程/, /所学课程/, /专业课/, /就读/, /GPA/i, /学分/, /毕业(?!设计|论文|课题|项目)/, /专业[：:（(]/]
     },
     {
@@ -968,7 +983,7 @@
     },
     {
       id: 'projects', title: '项目经历', sort: 'cards',
-      strong: /(项目|系统|平台|课题|作品)/,
+      strong: /(项目|系统|平台|课题|作品|毕业设计|毕设|课程设计|大作业)/,
       words: [/开发|实现|设计|搭建|构建|部署|负责|参与|完成|优化|算法/, /实验|仿真|调试|测试|数据集|模型/]
     },
     {
@@ -978,7 +993,7 @@
     },
     {
       id: 'awards', title: '荣誉奖项', sort: 'list',
-      strong: /(获奖|荣誉|奖项|奖学金)/,
+      strong: /(获奖|荣誉|奖项|奖学金|[一二三特]等奖|金奖|银奖|铜奖)/,
       words: [/一等奖|二等奖|三等奖|金奖|银奖|铜奖|优秀|标兵|竞赛/]
     },
     {
@@ -988,8 +1003,8 @@
     },
     {
       id: 'work', title: '工作经历', sort: 'cards',
-      strong: /(工作经历|实习经历|任职经历)/,
-      words: [/公司|集团|实习|任职|在职|岗位|部门/]
+      strong: /(工作经历|实习经历|任职经历|至今|有限公司)/,
+      words: [/公司|集团|实习|任职|在职|岗位|部门/, /工程师|实习生|经理|专员|主管|总监|架构师|分析师|顾问/]
     }
   ];
 
@@ -1114,6 +1129,10 @@
     /* 短标题行开出的新块，若自身信号很弱（只有「项目」两个字这种），沿用上一块的类型 */
     function resolveHint(chunk) {
       var hint = bestHint(chunk.hints);
+      /* 工作经历里常提到项目；有明确的工作信号（至今、公司全称等）时按工作经历算 */
+      if (hint.id === 'projects' && chunk.hints.work && chunk.hints.work.strong) {
+        hint = { id: 'work', title: '工作经历', sort: 'cards', score: hint.score, weak: false };
+      }
       if (hint.weak && chunk.resolved) {
         return { id: chunk.resolved.id, title: chunk.resolved.title, sort: chunk.resolved.sort, score: 1, weak: true };
       }
@@ -1137,12 +1156,14 @@
       var startNew = false;
 
       /* 这一行明显属于另一个区块，且累积得分够高 → 换块 */
+      /* 工作经历的描述里本来就会提到「系统」「项目」，不因此拆成单独的项目块 */
+      var workBody = curType.id === 'work' && lineHint.id === 'projects' && !hasDateLine;
       if (lineHint.id !== 'others' && lineHint.score >= 3 &&
-          lineHint.id !== curType.id && cur.lines.length) {
+          lineHint.id !== curType.id && cur.lines.length && !workBody) {
         startNew = true;
       }
       /* 短标题行 + 强关键词 → 换块（例如「工作经历」「获奖情况」） */
-      if (!startNew && hasStrong && isTitleish && strongIds.indexOf(curType.id) === -1 && cur.lines.length) {
+      if (!startNew && !workBody && hasStrong && isTitleish && strongIds.indexOf(curType.id) === -1 && cur.lines.length) {
         startNew = true;
       }
       /* 纯日期行：教育块的第一段时间留在一起（多条学历），之后才另起 */
