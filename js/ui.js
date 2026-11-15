@@ -428,6 +428,12 @@
     if (/^#parser\b/.test(location.hash) || /[?&]parser=1\b/.test(location.search)) {
       openDrawer();
     }
+    /* 页面已打开时点击 #parser 链接（或手动改地址栏）也要能打开 */
+    if (global.addEventListener) {
+      global.addEventListener('hashchange', function () {
+        if (/^#parser\b/.test(location.hash)) openDrawer();
+      });
+    }
   }
 
   var context = {

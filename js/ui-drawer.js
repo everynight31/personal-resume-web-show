@@ -68,7 +68,17 @@
       els.drawer.hidden = true;
       if (els.overlay) els.overlay.hidden = true;
     }, 340);
-    if (state.lastFocus && state.lastFocus.focus) state.lastFocus.focus();
+    /* 回到打开前的位置；用快捷键或 #parser 打开时没有具体入口，就回到「粘贴识别」按钮 */
+    var back = state.lastFocus;
+    var usable = back && back.focus && back !== document.body && back !== document.documentElement &&
+      (!document.contains || document.contains(back)) && !(els.drawer.contains && els.drawer.contains(back));
+    if (!usable) back = els.fab;
+    if (back && back.focus) back.focus();
+    state.lastFocus = null;
+    /* 清掉 #parser，下次点同一个链接才会再次触发 hashchange */
+    if (/^#parser\b/.test(global.location && global.location.hash || '') && global.history && global.history.replaceState) {
+      global.history.replaceState(null, '', global.location.pathname + global.location.search);
+    }
   }
 
   /* ================================================================ 主题 */

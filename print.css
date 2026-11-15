@@ -21,6 +21,7 @@
   .section-nav,
   .hero-actions,
   .skip-link,
+  .section-remove,
   #btn-parse, #btn-apply, #btn-undo, #btn-discard,
   .link-btn, .pane-head-actions {
     display: none !important;
@@ -90,13 +91,14 @@
   /* 打印时头像与姓名并排，省掉一整页空白 */
   .resume-hero .hero-top {
     display: flex !important;
+    flex-direction: row !important; /* 屏幕样式是竖排，这里必须显式改回横排 */
     align-items: center !important;
     gap: 12pt !important;
   }
 
   .avatar-ring {
-    width: 76pt !important;
-    height: 76pt !important;
+    width: 54pt !important;
+    height: 72pt !important;
     padding: 0 !important;
     margin: 0 !important;
     background: none !important;
@@ -130,11 +132,10 @@
   .resume-hero .intent {
     font-size: 9.5pt !important;
     margin: 5pt 0 0 !important;
-    padding: 2pt 8pt !important;
-    border: 1px solid #BBBBBB !important;
+    padding: 0 !important;
     background: none !important;
-    border-radius: 3pt !important;
-    display: inline-block !important;
+    display: block !important;
+    font-weight: 600 !important;
     color: #111111 !important;
   }
 
@@ -175,155 +176,107 @@
 
   /* ---------------------------------------------------- 5. 区块与分页 */
   .resume-section {
-    padding: 7pt 0 !important;
+    padding: 6pt 0 0 !important;
     margin: 0 !important;
-    border-bottom: 1px solid #DDDDDD !important;
     break-inside: auto;
     page-break-inside: auto;
   }
 
-  .resume-section:last-of-type { border-bottom: none !important; }
-
   .section-title {
     font-size: 12.5pt !important;
-    padding-bottom: 3pt !important;
-    margin-bottom: 6pt !important;
+    padding-bottom: 2pt !important;
+    margin-bottom: 5pt !important;
+    border-bottom: 0.6pt solid #CCCCCC !important;
     break-after: avoid;
     page-break-after: avoid;
   }
 
-  .section-title::before {
-    width: 2.4pt !important;
-    background: #1D4ED8 !important;
-  }
-
-  .section-title::after {
-    flex: 1 1 auto !important;
-    width: auto !important;
-    height: 0.6pt !important;
-    background: #DDDDDD !important;
-  }
-
-  .timeline-item, .card, .list-items li, .skills-grid {
+  /* 只保证单个条目不被拆开；不对整块 avoid，免得页尾留下大片空白 */
+  .timeline-item, .card, .list-items li, .skills-group {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  /* 卡片/条目的标题不要单独留在页尾 */
   .timeline-content h3, .card-header h3, .blocks li .block-label {
     break-after: avoid;
     page-break-after: avoid;
   }
 
-  /* 时间线 */
-  .timeline { padding-left: 14pt !important; }
-  .timeline::before { background: #CCCCCC !important; }
+  /* 时间线 / 卡片 / 列表：去掉屏幕上的白卡片，改成紧凑的纯排版 */
+  .timeline { gap: 6pt !important; }
+  .timeline-icon, .card-icon { display: none !important; }
 
-  .timeline-item { margin-bottom: 7pt !important; }
-
-  .timeline-icon {
-    left: -22pt !important;
-    top: 2pt !important;
-    width: 14pt !important;
-    height: 14pt !important;
-    border: 1px solid #0058B8 !important;
-    background: #FFFFFF !important;
-  }
-
-  .timeline-icon svg { width: 8pt !important; height: 8pt !important; }
-  .timeline-icon img { border-radius: 50%; }
-
-  .timeline-content {
-    padding: 6pt 9pt !important;
-    border: 1px solid #DDDDDD !important;
-    border-radius: 3pt !important;
+  .timeline-content, .card, .skills-grid, .list-items {
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
     background: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     transform: none !important;
   }
 
-  .timeline-content h3 { font-size: 11pt !important; margin-bottom: 2pt !important; }
+  .experience-list { display: flex; flex-direction: column; gap: 7pt; }
+
+  .timeline-content h3, .card-header h3 { font-size: 10.5pt !important; margin-bottom: 1pt !important; }
+  .card-header { margin-bottom: 3pt !important; gap: 0 !important; }
 
   .timeline-date, .card .job-date {
     float: right !important;
-    font-size: 8.5pt !important;
-    padding: 0 4pt !important;
-    border: 1px solid #CCCCCC !important;
-    background: none !important;
-    border-radius: 2pt !important;
+    display: inline !important;
+    font-size: 9pt !important;
+    padding: 0 !important;
+    margin: 0 0 0 8pt !important;
+    color: #444444 !important;
   }
 
-  .timeline-content .degree { font-size: 10pt !important; }
-  .timeline-content .location { font-size: 9pt !important; }
+  .timeline-content .degree, .card .job-title { font-size: 9.5pt !important; color: #222222 !important; }
+  .timeline-content .location, .card .job-location { font-size: 9pt !important; color: #555555 !important; }
 
-  /* 卡片 */
-  .card {
-    padding: 7pt 10pt !important;
-    margin-bottom: 7pt !important;
-    border: 1px solid #DDDDDD !important;
-    border-radius: 3pt !important;
-    background: none !important;
-    transform: none !important;
-  }
-
-  .card-header { margin-bottom: 5pt !important; gap: 7pt !important; }
-
-  .card-icon {
-    width: 16pt !important;
-    height: 16pt !important;
-    font-size: 8pt !important;
-    background: none !important;
-    border: 1px solid #0058B8 !important;
-  }
-
-  .card-icon svg { width: 9pt !important; height: 9pt !important; }
-  .card-header h3 { font-size: 11pt !important; }
-  .card .job-title { font-size: 9.5pt !important; }
+  .blocks { margin-top: 3pt !important; }
 
   .blocks li, .list-items li {
     font-size: 9.4pt !important;
     line-height: 1.48 !important;
-    margin-bottom: 3.5pt !important;
-    padding-left: 10pt !important;
+    margin-bottom: 2.5pt !important;
+    padding: 0 0 0 9pt !important;
+    border: none !important;
+    color: #1A1A1A !important;
   }
 
   .blocks li::before, .list-items li::before {
+    content: "" !important;
+    position: absolute !important;
+    left: 1pt !important;
     width: 3pt !important;
     height: 3pt !important;
     top: 5.5pt !important;
-    background: #0058B8 !important;
+    border-radius: 50% !important;
+    background: #555555 !important;
+    opacity: 1 !important;
   }
 
-  .blocks li .block-label { font-size: 10pt !important; margin-bottom: 1pt !important; }
-  .blocks li .block-label::after { display: none !important; }
+  .list-items li { position: relative !important; }
+  .blocks li .block-label { font-size: 9.6pt !important; margin-bottom: 0 !important; }
+  .list-items .item-title { display: inline !important; margin-right: 4pt !important; color: #000000 !important; }
+  .list-items .item-title::after { content: "：" !important; }
 
-  /* 技能标签 */
-  .skills-grid { gap: 5pt !important; }
-  .skills-group-title { font-size: 9pt !important; color: #444444 !important; margin-bottom: 3pt !important; }
-  .tag-container { gap: 3pt 5pt !important; }
+  /* 技能标签：打印成一行一组的纯文本 */
+  .skills-grid { gap: 3pt !important; }
+  .skills-group { display: flex !important; align-items: baseline !important; gap: 6pt !important; }
+  .skills-group-title { flex: none !important; font-size: 9.4pt !important; color: #000000 !important; margin: 0 !important; }
+  .skills-group-title::after { content: "："; }
+  .tag-container { gap: 0 !important; }
 
   .skill-tag {
-    font-size: 9pt !important;
-    padding: 1pt 7pt !important;
-    border: 1px solid #BBBBBB !important;
+    font-size: 9.4pt !important;
+    padding: 0 !important;
     background: none !important;
-    color: #111111 !important;
-    border-radius: 3pt !important;
-    transform: none !important;
+    color: #1A1A1A !important;
+    border-radius: 0 !important;
   }
 
-  .skill-tag.main-skill {
-    border-color: #0058B8 !important;
-    color: #0058B8 !important;
-    font-weight: 600 !important;
-    background: none !important;
-  }
-
-  .skill-tag.aux-skill { color: #333333 !important; }
-
-  .list-items { gap: 5pt !important; }
-  .list-items .item-title { color: #000000 !important; }
+  .skill-tag + .skill-tag::before { content: "、"; color: #555555; }
+  .skill-tag.main-skill { color: #000000 !important; font-weight: 600 !important; background: none !important; }
 
   /* ---------------------------------------------------- 6. 页脚 */
   #page-footer {
@@ -332,6 +285,7 @@
     border-top: 1px solid #DDDDDD !important;
     font-size: 8pt !important;
     color: #666666 !important;
+    text-align: center;
   }
 
   /* 兜底：任何带 reveal 类的元素都必须可见 */
